@@ -1,4 +1,4 @@
-#SINQ: Sinkhorn Normalized Quantization for LLMs
+# SINQ: Sinkhorn Normalized Quantization for LLMs
 
 ## Welcome 
 Welcome to the Sinkhorn Normalized Quantization (SINQ) repository. Here you'll find code to reproduce results our arxiv paper (link to be added soon). 
