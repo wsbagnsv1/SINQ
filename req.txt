@@ -1,0 +1,11 @@
+huggingface-hub==0.34.4
+einops==0.8.1
+datasets
+numpy
+scipy==1.13.1
+transformers==4.55.0
+torch==2.8.0
+torchaudio==2.8.0
+torchvision==0.23.0
+lm_eval==0.4.8
+
