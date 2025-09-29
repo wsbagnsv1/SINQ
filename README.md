@@ -67,10 +67,10 @@ With **SINQ**, they become **spread out and less severe**, preserving model accu
 - **>31× faster** quantization process and comparable or better LLM quality compared to **AWQ / GPTQ**
 - **Model-agnostic**: works without knowing the specific LLM architecture, unlike **QuaRot**  
 - **Training-free**: it does not require end-to-end training, unlike **SpinQuant** or **KurTail** 
-- **Additionally, A-SINQ (calibrated)** further **beats AWQ, GPTQ, and Hadamard+GPTQ** on quality while achieving **>4× faster** quantization.
+- **Additionally, A-SINQ (calibrated)** further **beats AWQ, GPTQ, and Hadamard+GPTQ** on quality while achieving **>4× faster** quantization time.
 
 **Example**  
-- ⏱️ SINQ quantizes **Qwen3-14B** in just **~21 sec** and **DeepSeekV2.5-236B** in **~5 min** on GPU
+- ⏱️ SINQ quantizes **Qwen3-14B** in just **~21 sec** and **DeepSeekV2.5-236B** in **~5 min** on a single GPU
 - 💾 Enables you to **run DeepSeekV2.5-236B** on a single GPU with **~110 GB** of memory (vs ~472 GB) while losing **< 1 ppl** on **WikiText2** and **C4**
 
 </details>
