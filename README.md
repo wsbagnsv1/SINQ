@@ -10,9 +10,8 @@
 
 ---
 
-## 🚀 Overview
-
-Welcome to the **official SINQ repository**!  
+## 🚀 Welcome to the **official SINQ repository**!
+  
 **SINQ** (Sinkhorn-Normalized Quantization) is a **novel, high-quality quantization method** designed to make any Large Language Models **smaller** while keeping their accuracy almost intact.
 
 ### 🔍 What You’ll Find Here
