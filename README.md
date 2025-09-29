@@ -1,9 +1,12 @@
-<p align="left">
-  <img src="imgs/logo.png" alt="SINQ Logo" width="110" style="vertical-align: middle; margin-right: 15px;">
-  <span style="font-size: 2.2em; font-weight: bold;">SINQ: Sinkhorn-Normalized Quantization for LLMs</span>
-</p>
+<table>
+  <tr>
+    <td><img src="imgs/logo.png" alt="SINQ Logo" width="110"></td>
+    <td style="vertical-align: middle;"><h1>SINQ: Sinkhorn-Normalized Quantization for LLMs</h1></td>
+  </tr>
+</table>
 
-> ⚡️ **A fast and plug-and-play model agnostic quantization technique** delivering **state-of-the-art performance** for Large Language Models (LLMs) without sacrificing accuracy.
+> ⚡️ **A fast, plug-and-play, model-agnostic quantization technique** delivering **state-of-the-art performance** for Large Language Models **without sacrificing accuracy.**
+
 
 ---
 
@@ -59,11 +62,11 @@ With **SINQ**, they become **spread out and less severe**, preserving model accu
 
 
 #### **SINQ (calibration-free)**  
-- ⚡ **Higher LLM quality** and **~2× faster** quantization than **HQQ** 
-- 📈 **>31× faster** quantization process and comparable or better LLM quality compared to **AWQ / GPTQ**
-- 🧩 **Model-agnostic**: works without knowing the specific LLM architecture, unlike **QuaRot**  
-- 🧪 **Training-free**: it does not require end-to-end training, unlike **SpinQuant** or **KurTail** 
-- 🔥 **Additionally, A-SINQ (calibrated)** further **beats AWQ, GPTQ, and Hadamard+GPTQ** on quality while achieving **>4× faster** quantization.
+- **Higher LLM quality** and **~2× faster** quantization than **HQQ** 
+- **>31× faster** quantization process and comparable or better LLM quality compared to **AWQ / GPTQ**
+- **Model-agnostic**: works without knowing the specific LLM architecture, unlike **QuaRot**  
+- **Training-free**: it does not require end-to-end training, unlike **SpinQuant** or **KurTail** 
+- **Additionally, A-SINQ (calibrated)** further **beats AWQ, GPTQ, and Hadamard+GPTQ** on quality while achieving **>4× faster** quantization.
 
 **Example**  
 - ⏱️ SINQ quantizes **Qwen3-14B** in just **~21 sec** and **DeepSeekV2.5-236B** in **~5 min** on GPU
@@ -118,7 +121,7 @@ AutoSINQHFModel.quantize_model(
 
 ---
 
-### 3. ⚙️ Optional Flags
+### 3. Optional Flags
 
 You can further customize the quantization process to balance **accuracy** and **memory** for your needs.  
 Here’s a summary of the main arguments you can tune:
@@ -213,6 +216,22 @@ We are actively expanding SINQ with new features and integrations. Stay tuned he
 - **30/10/2025** - SINQ GitHub repository made public  
 - 🔜 **Coming soon** – 🤗 Integration with **Hugging Face Transformers**  
 - 🔜 **Coming soon** – 📦 Pre-quantized **SINQ models** available on Hugging Face Hub
+
+## 📚 How to Cite This Work
+
+If you find **SINQ** useful in your research or applications, please cite our paper:
+
+```bibtex
+@misc{muller2025sinq,
+      title={SINQ: Sinkhorn-Normalized Quantization for Calibration-Free Low-Precision LLM Weights}, 
+      author={Lorenz K. Muller and Philippe Bich and Jiawei Zhuang and Ahmet Celik and Luca Benfenati and Lukas Cavigelli},
+      year={2025},
+      eprint={2509.99999},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2509.99999}
+}
+```
 
 
 ## 🔗 Related Repositories
