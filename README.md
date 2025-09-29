@@ -12,7 +12,7 @@
 
 ## 🚀 Welcome to the **official SINQ repository**!
   
-**SINQ** (Sinkhorn-Normalized Quantization) is a **novel, high-quality quantization method** designed to make any Large Language Models **smaller** while keeping their accuracy almost intact.
+**SINQ** (Sinkhorn-Normalized Quantization) is a **novel calibration-free, fast, model-agnostic high-quality quantization method** designed to make any Large Language Models **smaller** while keeping their accuracy almost intact.
 
 ### 🔍 What You’ll Find Here
 
@@ -21,6 +21,8 @@
 - <u>A few lines of code to <strong>quantize any LLM</strong> with <strong>SINQ</strong>!</u>  
 - Code to **reproduce results** from our paper  
 - 🤗 On going updates on new features and integrations
+
+📄 **Want to know more?** Read our paper on [**arXiv**](https://arxiv.org/)!
 
 ---
 
