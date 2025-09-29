@@ -1,4 +1,4 @@
-<table>
+<table border="0" cellspacing="0" cellpadding="0">
   <tr>
     <td><img src="imgs/logo.png" alt="SINQ Logo" width="110"></td>
     <td style="vertical-align: middle;"><h1>SINQ: Sinkhorn-Normalized Quantization for LLMs</h1></td>
