@@ -129,10 +129,11 @@ Here’s a summary of the main arguments you can tune:
 
 | Flag | Description | Options | Default |
 |------|-------------|---------|----------|
-| `--nbits` | Number of bits used for weight quantization. Lower values reduce memory usage but decrease accuracy. | 2, 3, 4, 5, 6, 8 | 4 |
-| `--tiling_mode` | Strategy for splitting weight matrices. More info in the. | 1D, 2D | 1D |
-| `--group_size` | Number of weights quantized together as a group. Larger groups improve compression. | 64, 128 | 64 |
-| `--method` | Quantization method: `sinq` for calibration-free, `sinq_awq_l1_quantAux` for calibrated high-accuracy quantization. | sinq, sinq_awq_l1_quantAux | sinq |
+| `--nbits` | Bit-width for weight quantization | 2, 3, 4, 5, 6, 8 | 4 |
+| `--tiling_mode` | Weight matrix tiling strategy | 1D, 2D | 1D |
+| `--group_size` | Weights per quantization group | 64, 128 | 64 |
+| `--method` | Quantization method | sinq, sinq_awq_l1_quantAux | sinq |
+
 
 💡 **Tip:** For most cases, the defaults (`--nbits 4 --tiling_mode 1D --group_size 64 --method sinq`) provide an excellent trade-off between compression and accuracy.
 
