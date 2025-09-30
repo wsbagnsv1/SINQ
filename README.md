@@ -241,7 +241,7 @@ We are actively expanding SINQ with new features and integrations. Stay tuned he
 
 ## 📚 How to Cite This Work
 
-If you find **SINQ** useful in your research or applications, please cite our [**paper**]([https://arxiv.org](http://arxiv.org/abs/2509.22944)):
+If you find **SINQ** useful in your research or applications, please cite our <a href="http://arxiv.org/abs/2509.22944" target="_blank"><strong>paper</strong></a>:
 
 ```bibtex
 @misc{muller2025sinq,
@@ -264,6 +264,7 @@ This project builds upon and extends the excellent work from the following open-
 - [**HQQ**](https://github.com/mobiusml/hqq) - High-quality calibration-free quantization baseline.
 
 📜 You can find their original licenses in the corresponding `LICENSE` files in these repositories.
+
 
 
 
