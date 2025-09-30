@@ -83,7 +83,7 @@ First, install the dependencies and set up the package:
 
 ```bash
 pip install -r req.txt
-pip install .
+pip install git+https://github.com/huawei-csl/sinq.git
 ```
 
 ---
@@ -139,7 +139,7 @@ Here’s a summary of the main arguments you can tune:
 
 ### 4. Compatible with [`lm-eval`](https://github.com/EleutherAI/lm-evaluation-harness) evaluation framework
 
-Below is a minimal example showing how to evaluate a SINQ-quantized model on a benchmark dataset using `HFLM`:
+Below is a minimal example showing how to evaluate a SINQ-quantized model on a benchmark dataset:
 
 ```python
 from lm_eval import evaluator
@@ -166,7 +166,7 @@ First, install the dependencies and set up the package:
 
 ```bash
 pip install -r req.txt
-pip install -e .
+pip install git+https://github.com/huawei-csl/sinq.git
 ```
 
 Then run the following command to quantize **Qwen3-1.7B** out of the box:
