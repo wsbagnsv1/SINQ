@@ -83,7 +83,7 @@ First, install the dependencies and set up the package:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/huawei-csl/sinq.git
+git clone https://github.com/huawei-csl/SINQ.git
 cd sinq
 
 # 2. Install dependencies
@@ -173,7 +173,7 @@ First, install the dependencies and set up the package:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/huawei-csl/sinq.git
+git clone https://github.com/huawei-csl/SINQ.git
 cd sinq
 
 # 2. Install dependencies
@@ -278,6 +278,7 @@ This project builds upon and extends the excellent work from the following open-
 - [**HQQ**](https://github.com/mobiusml/hqq) - High-quality calibration-free quantization baseline.
 
 📜 You can find their original licenses in the corresponding `LICENSE` files in these repositories.
+
 
 
 
