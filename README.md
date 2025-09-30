@@ -98,8 +98,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from sinq.patch_model import AutoSINQHFModel
 from sinq.sinqlinear import BaseQuantizeConfig
 
-model_name = "Qwen/Qwen3-14B"
-model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16, device_map="auto")
+model_name = "Qwen/Qwen3-1.7B"
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16).to("cuda:0")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 quant_cfg = BaseQuantizeConfig(
@@ -114,7 +114,7 @@ AutoSINQHFModel.quantize_model(
     tokenizer=tokenizer,
     quant_config=quant_cfg,
     compute_dtype=torch.bfloat16,
-    device="cuda"
+    device="cuda:0"
 )
 ```
 
@@ -137,6 +137,24 @@ Here’s a summary of the main arguments you can tune:
 
 💡 **Tip:** For most cases, the defaults (`--nbits 4 --tiling_mode 1D --group_size 64 --method sinq`) provide an excellent trade-off between compression and accuracy.
 
+### 4. Compatible with [`lm-eval`](https://github.com/EleutherAI/lm-evaluation-harness) evaluation framework
+
+Below is a minimal example showing how to evaluate a quantized model on a small benchmark dataset (e.g., **MMLU, HellSwag, PIQA, Lambada, etc.**) using `HFLM`:
+
+```python
+from lm_eval import evaluator
+from lm_eval.models.huggingface import HFLM
+
+# Wrap the already quantized model and tokenizer with HFLM
+lm = HFLM(pretrained=model, tokenizer=tokenizer, device="cuda:0")
+
+# Run a quick evaluation on a lightweight task
+results = evaluator.simple_evaluate(
+    model=lm,
+    tasks=["lambada_openai"],  # small and fast benchmark
+    device="cuda:0"
+)
+```
 
 ## 🧪 How to reproduce paper results
 <details>
