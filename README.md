@@ -227,7 +227,7 @@ Customize experiments with the following command-line arguments:
 | `--tiling_mode` | Strategy for tiling weight matrices during quantization | 1D, 2D | 1D |
 | `--group_size` | Number of weights processed together as a quantization group | 64, 128 | 64 |
 
-> 📝 **Note:** All results reported in the paper were obtained **not with `lm-eval`**, but using the framework from [Efficient-ML/Qwen3-Quantization](https://github.com/Efficient-ML/Qwen3-Quantization).
+> 📝 **Note:** All results reported in the paper were obtained using the evaluation framework from [Efficient-ML/Qwen3-Quantization](https://github.com/Efficient-ML/Qwen3-Quantization) rather than `lm-eval`. 
 </details>
 
 ## 🧭 Ongoing updates on new features and integrations
