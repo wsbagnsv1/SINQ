@@ -1,9 +1,13 @@
+[![arXiv](https://img.shields.io/badge/arXiv-2509.22944-b31b1b.svg)](https://arxiv.org/abs/2509.22944)
+
 <table border="0" cellspacing="0" cellpadding="0">
   <tr>
     <td><img src="imgs/logo.png" alt="SINQ Logo" width="110"></td>
     <td style="vertical-align: middle;"><h1>SINQ: Sinkhorn-Normalized Quantization for LLMs</h1></td>
   </tr>
 </table>
+
+
 
 > ⚡️ **A fast, plug-and-play, model-agnostic quantization technique** delivering **state-of-the-art performance** for Large Language Models **without sacrificing accuracy.**
 
@@ -280,6 +284,7 @@ This project builds upon and extends the excellent work from the following open-
 - [**HQQ**](https://github.com/mobiusml/hqq) - High-quality calibration-free quantization baseline.
 
 📜 You can find their original licenses in the corresponding `LICENSE` files in these repositories.
+
 
 
 
