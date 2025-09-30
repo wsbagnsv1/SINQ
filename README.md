@@ -7,6 +7,8 @@
 
 > ⚡️ **A fast, plug-and-play, model-agnostic quantization technique** delivering **state-of-the-art performance** for Large Language Models **without sacrificing accuracy.**
 
+> 💡 **Want to run a large model on your GPU but don’t have enough memory?** With **SINQ**, you can deploy models that would otherwise be too big **drastically reducing memory usage while preserving LLM quality.**
+
 
 ---
 
