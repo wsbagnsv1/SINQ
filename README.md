@@ -99,7 +99,7 @@ from sinq.patch_model import AutoSINQHFModel
 from sinq.sinqlinear import BaseQuantizeConfig
 
 model_name = "Qwen/Qwen3-14B"
-model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16, device_map="cuda:0")
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 quant_cfg = BaseQuantizeConfig(
@@ -244,6 +244,7 @@ This project builds upon and extends the excellent work from the following open-
 - [**HQQ**](https://github.com/mobiusml/hqq) - High-quality calibration-free quantization baseline.
 
 📜 You can find their original licenses in the corresponding `LICENSE` files in these repositories.
+
 
 
 
