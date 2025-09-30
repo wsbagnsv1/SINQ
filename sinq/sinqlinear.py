@@ -193,7 +193,9 @@ def sinq_base_quant_config(
     assert (
         nbits in Quantizer.SUPPORTED_BITS
     ), "nbits value not supported. Check Quantizer.SUPPORTED_BITS."
-
+    if method == "asinq":
+        #Re-mapping to let user use sinq_awq_l1_quantAux as asinq (A-SINQ in the paper)
+        method = "sinq_awq_l1_quantAux"
     if group_size is not None:
         assert is_divisible(
             group_size, 8

@@ -106,7 +106,7 @@ quant_cfg = BaseQuantizeConfig(
     nbits=4,            # quantization bit-width
     group_size=128,     # group size
     tiling_mode="1D",   # tiling strategy
-    method="sinq"       # quantization method
+    method="sinq"       # quantization method (asinq for the calibrated version)
 )
 
 AutoSINQHFModel.quantize_model(
@@ -132,7 +132,7 @@ Here’s a summary of the main arguments you can tune:
 | `--nbits` | Bit-width for weight quantization | 2, 3, 4, 5, 6, 8 | 4 |
 | `--tiling_mode` | Weight matrix tiling strategy | 1D, 2D | 1D |
 | `--group_size` | Weights per quantization group | 64, 128 | 64 |
-| `--method` | Quantization method | sinq, sinq_awq_l1_quantAux | sinq |
+| `--method` | Quantization method | sinq, asinq | sinq |
 
 
 💡 **Tip:** For most cases, the defaults (`--nbits 4 --tiling_mode 1D --group_size 64 --method sinq`) provide an excellent trade-off between compression and accuracy.
@@ -207,12 +207,12 @@ python quant_model_eval.py --method sinq_nf4 --model_name Qwen/Qwen3-1.7B
 
 ---
 
-### 4. Calibrated Quantization (AWQ + SINQ)
+### 4. Calibrated Quantization (AWQ + SINQ = A-SINQ)
 
 Combine SINQ with **activation-aware calibration (AWQ)** for higher accuracy:
 
 ```bash
-python quant_model_eval.py --method sinq_awq_l1_quantAux --model_name Qwen/Qwen3-1.7B
+python quant_model_eval.py --method asinq --model_name Qwen/Qwen3-1.7B
 ```
 
 ---
