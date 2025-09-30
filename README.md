@@ -205,7 +205,7 @@ Customize experiments with the following command-line arguments:
 
 | Flag | Description | Options | Default |
 |------|-------------|---------|----------|
-| `--nbits` | Number of bits used to quantize model weights | 2, 3, 4, 5, 6, 8 | 4 |
+| `--nbits` | Number of bits used to quantize model weights | 2, 3, 4, 8 | 4 |
 | `--tiling_mode` | Strategy for tiling weight matrices during quantization | 1D, 2D | 1D |
 | `--group_size` | Number of weights processed together as a quantization group | 64, 128 | 64 |
 </details>
@@ -214,7 +214,7 @@ Customize experiments with the following command-line arguments:
 
 We are actively expanding SINQ with new features and integrations. Stay tuned here for the latest updates:
 
-- **30/10/2025** - SINQ paper released on [**arXiv**](https://arxiv.org)  
+- **30/10/2025** - SINQ paper released on [**arXiv**]([https://arxiv.org](http://arxiv.org/abs/2509.22944))  
 - **30/10/2025** - SINQ GitHub repository made public  
 - 🔜 **Coming soon** – 🤗 Integration with **Hugging Face Transformers**  
 - 🔜 **Coming soon** – 📦 Pre-quantized **SINQ models** available on Hugging Face Hub
@@ -244,4 +244,5 @@ This project builds upon and extends the excellent work from the following open-
 - [**HQQ**](https://github.com/mobiusml/hqq) - High-quality calibration-free quantization baseline.
 
 📜 You can find their original licenses in the corresponding `LICENSE` files in these repositories.
+
 
