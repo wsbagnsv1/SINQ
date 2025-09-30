@@ -82,8 +82,15 @@ With **SINQ**, they become **spread out and less severe**, preserving model accu
 First, install the dependencies and set up the package:
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/huawei-csl/sinq.git
+cd sinq
+
+# 2. Install dependencies
 pip install -r req.txt
-pip install git+https://github.com/huawei-csl/SINQ.git
+
+# 3. Install SINQ
+pip install .
 ```
 
 ---
@@ -165,8 +172,15 @@ results = evaluator.simple_evaluate(
 First, install the dependencies and set up the package:
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/huawei-csl/sinq.git
+cd sinq
+
+# 2. Install dependencies
 pip install -r req.txt
-pip install git+https://github.com/huawei-csl/SINQ.git
+
+# 3. Install SINQ
+pip install .
 ```
 
 Then run the following command to quantize **Qwen3-1.7B** out of the box:
