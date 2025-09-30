@@ -250,8 +250,8 @@ Customize experiments with the following command-line arguments:
 
 We are actively expanding SINQ with new features and integrations. Stay tuned here for the latest updates:
 
-- **30/10/2025** - SINQ paper released on [**arXiv**]([https://arxiv.org](http://arxiv.org/abs/2509.22944))  
-- **30/10/2025** - SINQ GitHub repository made public  
+- **26/09/2025** - SINQ paper released on [**arXiv**]([https://arxiv.org](http://arxiv.org/abs/2509.22944))  
+- **30/09/2025** - SINQ GitHub repository made public  
 - 🔜 **Coming soon** – 🤗 Integration with **Hugging Face Transformers**  
 - 🔜 **Coming soon** – 📦 Pre-quantized **SINQ models** available on Hugging Face Hub
 
