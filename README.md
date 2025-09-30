@@ -139,7 +139,7 @@ Here’s a summary of the main arguments you can tune:
 
 ### 4. Compatible with [`lm-eval`](https://github.com/EleutherAI/lm-evaluation-harness) evaluation framework
 
-Below is a minimal example showing how to evaluate a quantized model on a small benchmark dataset (e.g., **MMLU, HellSwag, PIQA, Lambada, etc.**) using `HFLM`:
+Below is a minimal example showing how to evaluate a SINQ-quantized model on a benchmark dataset using `HFLM`:
 
 ```python
 from lm_eval import evaluator
@@ -148,7 +148,7 @@ from lm_eval.models.huggingface import HFLM
 # Wrap the already quantized model and tokenizer with HFLM
 lm = HFLM(pretrained=model, tokenizer=tokenizer, device="cuda:0")
 
-# Run a quick evaluation on a lightweight task
+# Evaluate (many tasks available on lm-eval such as MMLU and HellaSwag)
 results = evaluator.simple_evaluate(
     model=lm,
     tasks=["lambada_openai"],  # small and fast benchmark
