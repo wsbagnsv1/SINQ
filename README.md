@@ -22,7 +22,7 @@
 -  **Why** should I use **SINQ?**
 - <u>A few lines of code to <strong>quantize any LLM</strong> with <strong>SINQ</strong>!</u>  
 - Code to **reproduce results** from our paper  
-- 🤗 On going updates on new features and integrations
+- On going updates on new features and integrations (🤗)
 
 📄 **Want to know more?** Read our paper on [**arXiv**](http://arxiv.org/abs/2509.22944)!
 
