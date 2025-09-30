@@ -22,7 +22,7 @@
 - Code to **reproduce results** from our paper  
 - 🤗 On going updates on new features and integrations
 
-📄 **Want to know more?** Read our paper on [**arXiv**](https://arxiv.org/)!
+📄 **Want to know more?** Read our paper on [**arXiv**](http://arxiv.org/abs/2509.22944)!
 
 ---
 
@@ -228,10 +228,10 @@ If you find **SINQ** useful in your research or applications, please cite our pa
       title={SINQ: Sinkhorn-Normalized Quantization for Calibration-Free Low-Precision LLM Weights}, 
       author={Lorenz K. Muller and Philippe Bich and Jiawei Zhuang and Ahmet Celik and Luca Benfenati and Lukas Cavigelli},
       year={2025},
-      eprint={2509.99999},
+      eprint={2509.22944},
       archivePrefix={arXiv},
       primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2509.99999}
+      url={http://arxiv.org/abs/2509.22944}
 }
 ```
 
