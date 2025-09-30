@@ -106,7 +106,7 @@ quant_cfg = BaseQuantizeConfig(
     nbits=4,            # quantization bit-width
     group_size=128,     # group size
     tiling_mode="1D",   # tiling strategy
-    method="sinq"       # quantization method (asinq for the calibrated version)
+    method="sinq"       # quantization method ("asinq" for the calibrated version)
 )
 
 AutoSINQHFModel.quantize_model(
@@ -226,6 +226,8 @@ Customize experiments with the following command-line arguments:
 | `--nbits` | Number of bits used to quantize model weights | 2, 3, 4, 8 | 4 |
 | `--tiling_mode` | Strategy for tiling weight matrices during quantization | 1D, 2D | 1D |
 | `--group_size` | Number of weights processed together as a quantization group | 64, 128 | 64 |
+
+> 📝 **Note:** All results reported in the paper were obtained **not with `lm-eval`**, but using the framework from [Efficient-ML/Qwen3-Quantization](https://github.com/Efficient-ML/Qwen3-Quantization).
 </details>
 
 ## 🧭 Ongoing updates on new features and integrations
