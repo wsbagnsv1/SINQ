@@ -106,7 +106,7 @@ from sinq.patch_model import AutoSINQHFModel
 from sinq.sinqlinear import BaseQuantizeConfig
 
 model_name = "Qwen/Qwen3-1.7B"
-model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16).to("cuda:0")
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 quant_cfg = BaseQuantizeConfig(
