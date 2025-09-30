@@ -83,7 +83,7 @@ First, install the dependencies and set up the package:
 
 ```bash
 pip install -r req.txt
-pip install git+https://github.com/huawei-csl/sinq.git
+pip install git+https://github.com/huawei-csl/SINQ.git
 ```
 
 ---
