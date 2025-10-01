@@ -28,7 +28,23 @@
 - Code to **reproduce results** from our paper  
 - On going updates on new features and integrations (🤗)
 
+#### 📊 Feature Comparison: <u>SINQ vs HQQ</u> _(calibration free)_ and <u>A-SINQ vs AWQ</u> _(calibrated)_
+
+
+<div align="center">
+
+| Feature | **SINQ** | **HQQ** | │ | **A-SINQ** | **AWQ** |
+|--------|:--------:|:--------:|:--:|:----------:|:-------:|
+| Calibration | Calibration-free |  Calibration-free | │ | Calibrated | Calibrated |
+| Quantization Type | ✅ Symmetric & Asymmetric | ❌ Asymmetric only | │ | ✅ Symmetric & Asymmetric | ✅ Symmetric & Asymmetric |
+| NF4 Support | ✅ Yes | ❌ No | │ | ✅ Yes | ❌ No |
+| Quantization Speed | ⚡ ~2× Faster | 🐢 Slower | │ | ⚡ ~4× Faster | 🐢 Slower |
+| Model Quality | ⭐ Higher | ⚠️ Lower | │ | ⭐ Higher | ⚠️ Lower |
+
+</div>
+
 📄 **Want to know more?** Read our paper on [**arXiv**](http://arxiv.org/abs/2509.22944)!
+
 
 ---
 
@@ -78,7 +94,6 @@ With **SINQ**, they become **spread out and less severe**, preserving model accu
 **Example**  
 - ⏱️ SINQ quantizes **Qwen3-14B** in just **~21 sec** and **DeepSeekV2.5-236B** in **~5 min** on a single GPU
 - 💾 Enables you to **run DeepSeekV2.5-236B** on a single GPU with **~110 GB** of memory (vs ~472 GB) while losing **< 1 ppl** on **WikiText2** and **C4**
-
 </details>
 
 ## ⚡ Quantize Any LLM with SINQ
