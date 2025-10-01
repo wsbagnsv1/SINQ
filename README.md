@@ -31,17 +31,20 @@
 #### 📊 Feature Comparison: <u>SINQ vs HQQ</u> _(calibration free)_ and <u>A-SINQ vs AWQ</u> _(calibrated)_
 
 
+### 📊 Feature Comparison: SINQ vs HQQ _(calibration-free)_ and A-SINQ vs AWQ _(calibrated)_
+
 <div align="center">
 
-| Feature | **SINQ** | **HQQ** | │ | **A-SINQ** | **AWQ** |
-|--------|:--------:|:--------:|:--:|:----------:|:-------:|
-| Calibration | Calibration-free |  Calibration-free | │ | Calibrated | Calibrated |
-| Quantization Type | ✅ Symmetric & Asymmetric | ❌ Asymmetric only | │ | ✅ Symmetric & Asymmetric | ✅ Symmetric & Asymmetric |
-| NF4 Support | ✅ Yes | ❌ No | │ | ✅ Yes | ❌ No |
-| Quantization Speed | ⚡ ~2× Faster | 🐢 Slower | │ | ⚡ ~4× Faster | 🐢 Slower |
-| Model Quality | ⭐ Higher | ⚠️ Lower | │ | ⭐ Higher | ⚠️ Lower |
+| Feature | **SINQ** | **HQQ** | **A-SINQ** | **AWQ** |
+|--------|:--------:|:--------:|:----------:|:-------:|
+| Calibration | Calibration-free | Calibration-free | 🎯 Calibrated | 🎯 Calibrated |
+| Quantization Type | ✅ Symmetric & Asymmetric | ❌ Asymmetric only | ✅ Symmetric & Asymmetric | ✅ Symmetric & Asymmetric |
+| NF4 Support | ✅ Yes | ❌ No | ✅ Yes | ❌ No |
+| Quantization Speed | ⚡ ~2× Faster than HQQ| 🐢 Slower | ⚡ ~4× Faster than AWQ| 🐢 Slower |
+| Model Quality | ⭐ Higher | ⚠️ Lower | ⭐ Higher | ⚠️ Lower |
 
 </div>
+
 
 📄 **Want to know more?** Read our paper on [**arXiv**](http://arxiv.org/abs/2509.22944)!
 
