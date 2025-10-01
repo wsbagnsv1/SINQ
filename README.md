@@ -28,10 +28,7 @@
 - Code to **reproduce results** from our paper  
 - On going updates on new features and integrations (🤗)
 
-#### 📊 Feature Comparison: <u>SINQ vs HQQ</u> _(calibration free)_ and <u>A-SINQ vs AWQ</u> _(calibrated)_
-
-
-### 📊 Feature Comparison: SINQ vs HQQ _(calibration-free)_ and A-SINQ vs AWQ _(calibrated)_
+#### 📊 Feature Comparison: SINQ vs HQQ _(calibration-free)_ and A-SINQ vs AWQ _(calibrated)_
 
 <div align="center">
 
