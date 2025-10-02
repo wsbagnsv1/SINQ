@@ -23,11 +23,13 @@
 
 ### 🔍 What You’ll Find Here
 
--  A brief overview of how **SINQ** works under the hood
--  **Why** should I use **SINQ?**
-- <u>A few lines of code to <strong>quantize any LLM</strong> with <strong>SINQ</strong>!</u>  
-- Code to **reproduce results** from our paper  
-- On going updates on new features and integrations (🤗)
+- [1. How does SINQ work?](#1-how-does-sinq-work)
+- [2. Why should I use SINQ?](#2-why-should-i-use-sinq)
+- [3. Quantize any LLM with SINQ](#3-quantize-any-llm-with-sinq)
+- [4. How to reproduce paper results](#4-how-to-reproduce-paper-results)
+- [5. Ongoing updates on new features and integrations](#5-ongoing-updates-on-new-features-and-integrations)
+- [6. How to Cite This Work](#6-how-to-cite-this-work)
+- [7. Related Repositories](#7-related-repositories)
 
 #### 📊 Feature Comparison: SINQ vs HQQ _(calibration-free)_ and A-SINQ vs AWQ _(calibrated)_
 
@@ -36,10 +38,10 @@
 | Feature | **SINQ** | **HQQ** | **A-SINQ** | **AWQ** |
 |--------|:--------:|:--------:|:----------:|:-------:|
 | Calibration | Calibration-free | Calibration-free | 🎯 Calibrated | 🎯 Calibrated |
-| Quantization Type | ✅ Symmetric & Asymmetric | ❌ Asymmetric only | ✅ Symmetric & Asymmetric | ✅ Symmetric & Asymmetric |
-| NF4 Support | ✅ Yes | ❌ No | ✅ Yes | ❌ No |
-| Quantization Speed | ⚡ ~2× Faster than HQQ| 🐢 Slower | ⚡ ~4× Faster than AWQ| 🐢 Slower |
-| Model Quality | ⭐ Higher | ⚠️ Lower | ⭐ Higher | ⚠️ Lower |
+| Quantization Type | Symmetric & Asymmetric | Asymmetric only | Symmetric & Asymmetric | Symmetric & Asymmetric |
+| NF4 Support | **Yes** | No | **Yes** | No |
+| Quantization Speed | ~2× **Faster** than HQQ| Slower | ~4× **Faster** than AWQ| Slower |
+| Model Quality | **Higher** | Lower | **Higher** | Lower |
 
 </div>
 
@@ -49,7 +51,7 @@
 
 ---
 
-## 🧠 How does SINQ work?
+## 1. How does SINQ work?
 
 <details>
 <summary>Click to expand a quick explanation of SINQ’s core idea</summary>
@@ -80,7 +82,7 @@ With **SINQ**, they become **spread out and less severe**, preserving model accu
 </details>
 
 ---
-## 💡 Why should I use SINQ?
+## 2. Why should I use SINQ?
 <details>
 <summary>Click to expand a quick explanation on why you should use SINQ to quantize your LLM</summary>
 
@@ -97,9 +99,9 @@ With **SINQ**, they become **spread out and less severe**, preserving model accu
 - 💾 Enables you to **run DeepSeekV2.5-236B** on a single GPU with **~110 GB** of memory (vs ~472 GB) while losing **< 1 ppl** on **WikiText2** and **C4**
 </details>
 
-## ⚡ Quantize Any LLM with SINQ
+## 3. Quantize any LLM with SINQ
 
-### 1. Setup & Quick Start
+### Setup & Quick Start
 
 First, install the dependencies and set up the package:
 
@@ -117,7 +119,7 @@ pip install .
 
 ---
 
-### 2. Quantize in a few lines
+### Quantize in a few lines
 
 Quantizing any 🤗 Hugging Face model with SINQ is simple and takes only a few lines of code:
 
@@ -151,7 +153,7 @@ AutoSINQHFModel.quantize_model(
 
 ---
 
-### 3. Optional Flags
+### Optional Flags
 
 You can further customize the quantization process to balance **accuracy** and **memory** for your needs.  
 Here’s a summary of the main arguments you can tune:
@@ -166,7 +168,7 @@ Here’s a summary of the main arguments you can tune:
 
 💡 **Tip:** For most cases, the defaults (`--nbits 4 --tiling_mode 1D --group_size 64 --method sinq`) provide an excellent trade-off between compression and accuracy.
 
-### 4. Compatible with [`lm-eval`](https://github.com/EleutherAI/lm-evaluation-harness) evaluation framework
+### Compatible with [`lm-eval`](https://github.com/EleutherAI/lm-evaluation-harness) evaluation framework
 
 Below is a minimal example showing how to evaluate a SINQ-quantized model on a benchmark dataset:
 
@@ -185,11 +187,11 @@ results = evaluator.simple_evaluate(
 )
 ```
 
-## 🧪 How to reproduce paper results
+## 4. How to reproduce paper results
 <details>
 <summary>Click to expand the commands to reproduce the paper results</summary>
 
-### 1. Setup & Quick Start
+### Setup & Quick Start
 
 First, install the dependencies and set up the package:
 
@@ -221,7 +223,7 @@ By default, this will run SINQ with the following settings:
 
 ---
 
-### 2. Uniform, Uncalibrated Quantization
+### Uniform, Uncalibrated Quantization
 
 Reproduce the **core SINQ results** (as shown in Table 1 of the paper):
 
@@ -233,7 +235,7 @@ This uses **INT4 uniform quantization** without calibration - the main benchmark
 
 ---
 
-### 3. Non-Uniform Quantization (NF4)
+### Non-Uniform Quantization (NF4)
 
 Try SINQ with **non-uniform quantization** (e.g., NF4):
 
@@ -243,7 +245,7 @@ python quant_model_eval.py --method sinq_nf4 --model_name Qwen/Qwen3-1.7B
 
 ---
 
-### 4. Calibrated Quantization (AWQ + SINQ = A-SINQ)
+### Calibrated Quantization (AWQ + SINQ = A-SINQ)
 
 Combine SINQ with **activation-aware calibration (AWQ)** for higher accuracy:
 
@@ -266,16 +268,17 @@ Customize experiments with the following command-line arguments:
 > 📝 **Note:** All results reported in the paper were obtained using the evaluation framework from [Efficient-ML/Qwen3-Quantization](https://github.com/Efficient-ML/Qwen3-Quantization) rather than `lm-eval`. 
 </details>
 
-## 🧭 Ongoing updates on new features and integrations
+## 5. Ongoing updates on new features and integrations
 
 We are actively expanding SINQ with new features and integrations. Stay tuned here for the latest updates:
 
 - **26/09/2025** - SINQ paper released on [**arXiv**]([https://arxiv.org](http://arxiv.org/abs/2509.22944))  
 - **30/09/2025** - SINQ GitHub repository made public  
+- **02/10/2025** - SINQ paper featured on [**🤗 Hugging Face Papers**](https://huggingface.co/papers/2509.22944)
 - 🔜 **Coming soon** – 🤗 Integration with **Hugging Face Transformers**  
 - 🔜 **Coming soon** – 📦 Pre-quantized **SINQ models** available on Hugging Face Hub
 
-## 📚 How to Cite This Work
+## 6. How to Cite This Work
 
 If you find **SINQ** useful in your research or applications, please cite our <a href="http://arxiv.org/abs/2509.22944" target="_blank"><strong>paper</strong></a>:
 
@@ -292,7 +295,7 @@ If you find **SINQ** useful in your research or applications, please cite our <a
 ```
 
 
-## 🔗 Related Repositories
+## 7. Related Repositories
 
 This project builds upon and extends the excellent work from the following open-source projects:
 
