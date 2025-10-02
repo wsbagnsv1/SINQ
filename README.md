@@ -274,7 +274,7 @@ We are actively expanding SINQ with new features and integrations. Stay tuned he
 
 - **26/09/2025** - SINQ paper released on [**arXiv**]([https://arxiv.org](http://arxiv.org/abs/2509.22944))  
 - **30/09/2025** - SINQ GitHub repository made public  
-- **02/10/2025** - SINQ paper featured on [**🤗 Hugging Face Papers**](https://huggingface.co/papers/2509.22944)
+- **02/10/2025** - SINQ paper featured on 🤗 [**Hugging Face Papers**](https://huggingface.co/papers/2509.22944)
 - 🔜 **Coming soon** – 🤗 Integration with **Hugging Face Transformers**  
 - 🔜 **Coming soon** – 📦 Pre-quantized **SINQ models** available on Hugging Face Hub
 
