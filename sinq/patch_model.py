@@ -11,6 +11,8 @@ from tqdm import tqdm
 from abc import abstractmethod
 from functools import partial
 from typing import Union
+import transformers
+from accelerate import init_empty_weights
 
 from .utils import cleanup
 from .sinqlinear import SINQLinear
@@ -391,41 +393,66 @@ class BaseSINQModel:
         # Set base class
         model.base_class = cls
 
-        model.SINQ_quantized = True
+        model.sinq_quantized = True
 
         return model
 
     # Prepares model weights by iterating through modules. It might some parameters that are NOT modules like model.param1
     @classmethod
     def serialize_weights(cls, model, verbose: bool = False) -> dict:
+        """
+        Collect per-leaf module weights. For SINQLinear we rely on its custom
+        state_dict() (added in Step 1). For other leaves we use state_dict()
+        and, if empty but tensors exist, fall back to direct capture.
+        """
         weights = {}
         ignore_keys = cls.get_ignore_layers(model)
-        for name, module in model.named_modules():
-            if name in ignore_keys:
-                continue
-            try:
-                # disable state_dict encoding for safetensors
-                module.encoded_state_dict = False
-                state_dict = module.state_dict()
 
-                if len(state_dict) > 0:
-                    weights[name] = dict(state_dict)
-            except Exception:
+        def _is_leaf(m: nn.Module) -> bool:
+            return len(m._modules) == 0
+
+        for name, module in model.named_modules():
+            if name in ignore_keys or not _is_leaf(module):
+                continue
+
+            try:
+                state = module.state_dict()
+                # If empty but the module actually owns tensors, capture directly
+                if (len(state) == 0):
+                    has_params_or_bufs = any(True for _ in module.parameters(recurse=False)) or \
+                                        any(b is not None for b in module.buffers(recurse=False))
+                    if has_params_or_bufs:
+                        direct = {}
+                        for k, p in module.named_parameters(recurse=False):
+                            direct[k] = p.detach().clone().cpu()
+                        for k, b in module.named_buffers(recurse=False):
+                            if b is not None:
+                                direct[k] = b.detach().clone().cpu()
+                        state = direct
+
+                if len(state) > 0:
+                    weights[name] = state
+
+            except Exception as e:
                 if verbose:
-                    print("Skipping", name)
+                    print(f"[serialize_weights] Skipping {name}: {e}")
 
         return weights
+
 
     # Main function to save a quantized model
     @classmethod
     def save_quantized(cls, model, save_dir: str, verbose: bool = False):
-        # Save config
+        # Ensure target directory exists
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Save config (writes config.json)
         cls.cache_model(model, save_dir)
 
-        # Serialization
+        # Serialize per-module weights
         weights = cls.serialize_weights(model, verbose=verbose)
 
-        # Save
+        # Save weights blob (e.g., qmodel.pt)
         cls.save_weights(weights, save_dir)
 
     # Main function to load a SINQ quantized model from either HF hub or locally
@@ -438,65 +465,105 @@ class BaseSINQModel:
         cache_dir: Union[str, None] = "",
         **kwargs,
     ):
-        # Load model from config
+        # Local folder only for now (Hub comes next)
+        if not os.path.isdir(save_dir_or_hub):
+            raise ValueError(
+                f"Expected a local directory for 'save_dir_or_hub' (got: {save_dir_or_hub})."
+            )
+        save_dir = save_dir_or_hub
+
+        # Recreate empty model from config (meta tensors)
         model = cls.create_model(save_dir, kwargs)
-
-        # Track save directory
         model.save_dir = save_dir
-
-        # Name the layers
         cls.setup_model(model)
 
-        # Load weights
+        # Load serialized weights dict
         try:
-            weights = cls.load_weights(save_dir, device)
-        except Exception:
+            weights = cls.load_weights(save_dir, map_location=device)
+        except Exception as e:
             print("Failed to load the weights")
-            raise FileNotFoundError
+            raise FileNotFoundError(f"Could not load weights from {save_dir}: {e}")
 
-        # load_state_dict() doesn't work with modules initialized with init_empty_weights(), so we need to do this manually
+        # ---- Preflight: every parameterized leaf must have an entry in `weights`
+        param_leaves = []
+        for name, module in model.named_modules():
+            # Only check leaves
+            if len(module._modules) == 0:
+                has_params_or_buffers = any(True for _ in module.parameters(recurse=False)) or \
+                                        any(b is not None for b in module.buffers(recurse=False))
+                if has_params_or_buffers:
+                    param_leaves.append(name)
+
+        missing = [n for n in param_leaves if n not in weights]
+        if len(missing) > 0:
+            preview = ", ".join(missing[:10])
+            raise RuntimeError(
+                f"[SINQ] {len(missing)} parameterized leaf modules are missing from saved weights "
+                f"(examples: {preview}). This will cause wrong outputs. "
+                "Fix serialize_weights() so these leaves are included."
+            )
+        # ---- End preflight
+
         @torch.no_grad()
         def _load_module(module, params=None):
+            # Stateles leaf (e.g., Dropout/GELU) -> nothing to load or move; keep meta ok
             if module.name not in weights:
-                return module.to(device=device, dtype=compute_dtype, non_blocking=True)
+                # Double-check it's truly stateless
+                has_params_or_buffers = any(True for _ in module.parameters(recurse=False)) or \
+                                        any(b is not None for b in module.buffers(recurse=False))
+                if has_params_or_buffers:
+                    # Should never happen thanks to preflight
+                    raise RuntimeError(f"Missing weights for parameterized leaf: {module.name}")
+                module.device = device
+                return module
 
+            # Restore from saved dict
             state_dict = weights[module.name]
+
+            # Quantized linear?
             if "W_q" in state_dict:
-                module = SINQLinear(
+                m = SINQLinear(
                     linear_layer=None,
                     quant_config=None,
                     compute_dtype=compute_dtype,
                     device=device,
                 )
-                module.load_state_dict(state_dict)
-            else:
-                for key in state_dict:
-                    setattr(
-                        module,
-                        key,
-                        nn.Parameter(
-                            state_dict[key].to(
-                                device=device, dtype=compute_dtype, non_blocking=True
-                            ),
-                            requires_grad=False,
-                        ),
-                    )
+                m.load_state_dict(state_dict, strict=True)
+                m.device = device
+                return m
 
+            # Regular leaf with tensors
+            for key, tensor in state_dict.items():
+                is_param = (key in getattr(module, "_parameters", {}) and getattr(module, "_parameters")[key] is not None)
+                is_buffer = key in getattr(module, "_buffers", {})
+
+                if is_param:
+                    # cast params to compute_dtype
+                    t = tensor.to(device=device, dtype=compute_dtype, non_blocking=True)
+                    setattr(module, key, nn.Parameter(t, requires_grad=False))
+                elif is_buffer:
+                    # keep original buffer dtype
+                    t = tensor.to(device=device, dtype=tensor.dtype, non_blocking=True)
+                    module._buffers[key] = t
+                else:
+                    # fallback for non-registered attrs occasionally present in state_dict
+                    t = tensor.to(device=device, non_blocking=True)
+                    setattr(module, key, t)
+
+            module.device = device
             return module
 
-        # Load modules
-        cls.patch_model(
-            model, _load_module, _load_module, {k: None for k in model.linear_tags}
-        )
+        # Patch all leaves
+        cls.patch_model(model, _load_module, _load_module, {k: None for k in model.linear_tags})
 
-        # Load other weights that are not part of any module
-        cls.post_module_load(model, weights)
+        # Optional: load non-module tensors if subclass implements it
+        if hasattr(cls, "post_module_load"):
+            cls.post_module_load(model, weights)
 
-        model.SINQ_quantized = True
-
-        # Set base class
+        model.sinq_quantized = True
         model.base_class = cls
-
+        model.eval()
+        return model
 
 class BaseSINQHFModel(BaseSINQModel):
     # Save model architecture
@@ -515,9 +582,7 @@ class BaseSINQHFModel(BaseSINQModel):
             if key in kwargs:
                 model_kwargs[key] = kwargs[key]
 
-        config = transformers.AutoConfig.from_pretrained(
-            cls.get_config_file(save_dir)
-        )
+        config = transformers.AutoConfig.from_pretrained(save_dir)
 
         auto_class = transformers.AutoModel
 

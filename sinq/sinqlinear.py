@@ -1,7 +1,7 @@
 # modified by SINQ authors 2025
 
 import copy
-from typing import Union
+from typing import Union, Optional
 
 import torch
 from torch import nn, Tensor
@@ -14,7 +14,7 @@ class SINQLinear(nn.Module):
     def __init__(
         self,
         linear_layer: Union[nn.Module, None],
-        quant_config: dict,
+        quant_config: Optional[dict] = None,
         del_orig: bool = True,
         compute_dtype: torch.dtype = torch.float16,
         device: str = "cuda",
@@ -30,7 +30,7 @@ class SINQLinear(nn.Module):
         self.channel_wise = None
         self.device = device
         self.compute_dtype = compute_dtype
-        self.quant_config = copy.deepcopy(quant_config)
+        self.quant_config = copy.deepcopy(quant_config) if quant_config is not None else None
         self.del_orig = del_orig
         self.use_unpack_kernel = use_unpack_kernel
 
@@ -39,7 +39,13 @@ class SINQLinear(nn.Module):
         self.meta = None
         self.layer_activations = layer_activations
 
-        self.initialize()
+        # If we’re quantizing from a dense nn.Linear + have a config, do it now.
+        # If we’re going to load pre-quantized tensors, skip initialization.
+        if (self.linear_layer is not None) and (self.quant_config is not None):
+            self.initialize()
+            self.ready = True
+        else:
+            self.ready = False
 
     def initialize(self):
 
@@ -177,6 +183,54 @@ class SINQLinear(nn.Module):
                     f"device={self.device}, W_q.device={self.W_q.device}"
                 )
         return out
+    
+    def _meta_to_cpu(self, meta: dict) -> dict:
+        if meta is None:
+            return None
+        out = {}
+        for k, v in meta.items():
+            out[k] = v.detach().cpu() if isinstance(v, torch.Tensor) else v
+        return out
+
+    def state_dict(self, destination=None, prefix: str = '', keep_vars: bool = False):
+        """
+        Export quantized tensors for saving:
+          - W_q (Tensor)
+          - bias (Tensor or omitted if None)
+          - meta (dict; tensors moved to CPU)
+        """
+        sd = {}
+        if self.W_q is not None:
+            sd["W_q"] = self.W_q.detach().cpu()
+        if self.bias is not None:
+            sd["bias"] = self.bias.detach().cpu()
+        if self.meta is not None:
+            sd["meta"] = self._meta_to_cpu(self.meta)
+        return sd
+
+    def load_state_dict(self, state_dict, strict: bool = True):
+        """
+        Restore pre-quantized tensors without re-quantizing.
+        Assumes self.device / self.compute_dtype are set by the caller.
+        """
+        # Required
+        self.W_q = state_dict["W_q"].to(device=self.device)
+        self.meta = state_dict["meta"]
+
+        # Optional bias
+        b = state_dict.get("bias", None)
+        self.bias = b.to(device=self.device, dtype=self.compute_dtype) if b is not None else None
+
+        # Infer features for nicer repr and possible use elsewhere
+        if isinstance(self.meta, dict) and "shape" in self.meta:
+            out_f, in_f = self.meta["shape"]  # meta stores (out_features, in_features)
+            self.in_features, self.out_features = in_f, out_f
+
+        self.ready = True
+
+        # Match nn.Module API return
+        from torch.nn.modules.module import _IncompatibleKeys
+        return _IncompatibleKeys(missing_keys=[], unexpected_keys=[])
 
 
 def sinq_base_quant_config(

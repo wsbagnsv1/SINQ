@@ -26,7 +26,7 @@
 
 - [1. How does SINQ work?](#1-how-does-sinq-work)
 - [2. Why should I use SINQ?](#2-why-should-i-use-sinq)
-- [3. Quantize any LLM with SINQ](#3-quantize-any-llm-with-sinq)
+- <u>[3. Quantize any LLM with SINQ](#3-quantize-any-llm-with-sinq)</u>
 - [4. How to reproduce paper results](#4-how-to-reproduce-paper-results)
 - [5. Ongoing updates on new features and integrations](#5-ongoing-updates-on-new-features-and-integrations)
 - [6. How to Cite This Work](#6-how-to-cite-this-work)
@@ -148,8 +148,6 @@ AutoSINQHFModel.quantize_model(
 
 ✅ That’s it. Your model is now quantized with **SINQ** and ready for inference or saving.
 
----
-
 ### Optional Flags
 
 You can further customize the quantization process to balance **accuracy** and **memory** for your needs.  
@@ -164,6 +162,39 @@ Here’s a summary of the main arguments you can tune:
 
 
 💡 **Tip:** For most cases, the defaults (`--nbits 4 --tiling_mode 1D --group_size 64 --method sinq`) provide an excellent trade-off between compression and accuracy.
+
+---
+
+### Save & reload (optional)
+
+If you want to reuse a quantized model later, you can save it to disk and reload it instantly.
+
+```python
+# --- Save to a folder ---
+from sinq.patch_model import AutoSINQHFModel
+
+save_dir = "qwen3-1.7b-sinq-4bit"  # any path
+AutoSINQHFModel.save_quantized(model, save_dir, verbose=True) # model is an already sinq-quantized model
+```
+
+```python
+# --- Reload later (no base FP weights needed) ---
+from sinq.patch_model import AutoSINQHFModel
+import torch
+
+qmodel = AutoSINQHFModel.from_quantized(
+    save_dir,
+    device="cuda:0",
+    compute_dtype=torch.bfloat16, 
+)
+
+# (optional) quick smoke test
+prompt = "Explain neural network quantization in one sentence."
+inputs = tokenizer(prompt, return_tensors="pt").to("cuda:0")
+with torch.inference_mode():
+    out_ids = qmodel.generate(**inputs, max_new_tokens=32, do_sample=False)
+print(tokenizer.decode(out_ids[0], skip_special_tokens=True))
+```
 
 ### Compatible with [`lm-eval`](https://github.com/EleutherAI/lm-evaluation-harness) evaluation framework
 
