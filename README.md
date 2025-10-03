@@ -167,7 +167,7 @@ Here’s a summary of the main arguments you can tune:
 
 ### Save & reload (optional)
 
-If you want to reuse a quantized model later, you can save it to disk and reload it instantly.
+If you want to reuse a quantized model later, you can save it to disk and reload it later.
 
 ```python
 # --- Save to a folder ---
