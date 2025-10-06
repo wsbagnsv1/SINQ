@@ -17,10 +17,6 @@
 
 > 💡 **Want to run a large model on your GPU but don’t have enough memory?** With **SINQ**, you can deploy models that would otherwise be too big **drastically reducing memory usage while preserving LLM quality.**
 
-
----
-
-## 🚀 Welcome to the **official SINQ repository**!
   
 ---
 
