@@ -232,7 +232,7 @@ First, install the dependencies and set up the package:
 ```bash
 # 1. Clone the repository
 git clone https://github.com/huawei-csl/SINQ.git
-cd sinq
+cd SINQ
 
 # 2. Install dependencies
 pip install -r req.txt
