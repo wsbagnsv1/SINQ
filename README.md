@@ -221,7 +221,7 @@ print(tokenizer.decode(out_ids[0], skip_special_tokens=True))
 from sinq.patch_model import AutoSINQHFModel
 
 save_dir = "qwen3-1.7b-sinq-4bit"  # any path
-AutoSINQHFModel.save_quantized(qmodel, save_dir, verbose=True)  # creates qmodel.pt
+AutoSINQHFModel.save_quantized(qmodel, tokenizer, save_dir, verbose=True)  # creates qmodel.pt
 ```
 
 ```python
@@ -229,6 +229,7 @@ AutoSINQHFModel.save_quantized(qmodel, save_dir, verbose=True)  # creates qmodel
 from sinq.patch_model import AutoSINQHFModel
 import torch
 
+tokenizer = AutoTokenizer.from_pretrained(save_dir)
 qmodel = AutoSINQHFModel.from_quantized(
     save_dir,
     device="cuda:0",

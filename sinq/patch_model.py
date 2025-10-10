@@ -570,12 +570,19 @@ class BaseSINQModel:
 
     # Main function to save a quantized model
     @classmethod
-    def save_quantized(cls, model, save_dir: str, verbose: bool = False):
+    def save_quantized(cls, model, tokenizer, save_dir: str, verbose: bool = False, write_tokenizer: bool = True):
         # Ensure target directory exists
         os.makedirs(save_dir, exist_ok=True)
 
         # Save config (writes config.json)
         cls.cache_model(model, save_dir)
+
+        if write_tokenizer:
+            try:
+                BaseSINQHFModel.save_tokenizer_assets(tokenizer, save_dir)
+            except Exception as e:
+                if verbose:
+                    print(f"[save_quantized_safetensors] Could not save tokenizer: {e}")
 
         # Serialize per-module weights
         weights = cls.serialize_weights(model, verbose=verbose)
