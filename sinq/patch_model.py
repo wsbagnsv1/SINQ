@@ -2,6 +2,7 @@
 
 import os
 import json
+import math
 import torch
 from torch import nn
 from torch import float16
@@ -13,12 +14,33 @@ from functools import partial
 from typing import Union
 import transformers
 from accelerate import init_empty_weights
+from pathlib import Path
 
 from .utils import cleanup
 from .sinqlinear import SINQLinear
 from .awq import *
 
+# --- optional safetensors support (adds capability without changing defaults) ---
+try:
+    from safetensors.torch import save_file as _st_save, load_file as _st_load
+except Exception:
+    _st_save = _st_load = None
 
+# Sharded safetensors constants
+SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
+SAFE_WEIGHTS_BASENAME   = "model"  # -> model-00001-of-000NN.safetensors
+
+def _parse_size_to_bytes(x) -> int:
+    if isinstance(x, (int, float)):
+        return int(x)
+    s = str(x).strip().upper()
+    if s.endswith("GB"):
+        return int(float(s[:-2]) * (1024**3))
+    if s.endswith("MB"):
+        return int(float(s[:-2]) * (1024**2))
+    if s.endswith("KB"):
+        return int(float(s[:-2]) * 1024)
+    return int(s)
 
 # Defined what is qualified as "linear layer"
 _QUANT_LAYERS = [nn.Linear, SINQLinear]
@@ -224,6 +246,115 @@ class BaseSINQModel:
             cls.get_weight_file(save_dir), map_location=map_location, weights_only=True
         )
 
+    # ===========================
+    # Sharded safetensors (ONLY)
+    # ===========================
+    @classmethod
+    def load_weights_safetensors(cls, save_dir: str, map_location="cpu", filename: str = "model.safetensors") -> dict:
+        """
+        Sharded-only loader:
+          - reads 'model.safetensors.index.json'
+          - loads all listed shards and merges into a flat dict
+          - re-groups per-leaf; re-nests '.meta.' entries
+          - merges non-tensor sidecar from 'model.safetensors.index.json.meta.json'
+        Note: the 'filename' arg is ignored in sharded mode and kept only for API compatibility.
+        """
+        if _st_load is None:
+            raise ImportError("safetensors not installed. `pip install safetensors`")
+
+        index_path = os.path.join(save_dir, SAFE_WEIGHTS_INDEX_NAME)
+        if not os.path.isfile(index_path):
+            raise FileNotFoundError(f"Missing index file: {index_path}")
+
+        with open(index_path, "r", encoding="utf-8") as f:
+            index = json.load(f)
+
+        weight_map = index.get("weight_map", {})
+        if not weight_map:
+            raise RuntimeError("Empty weight_map in index.")
+
+        # Load each shard once, merge tensors
+        flat = {}
+        shard_to_keys = {}
+        for k, fname in weight_map.items():
+            shard_to_keys.setdefault(fname, []).append(k)
+
+        for fname, keys in shard_to_keys.items():
+            shard_path = os.path.join(save_dir, fname)
+            if not os.path.isfile(shard_path):
+                raise FileNotFoundError(shard_path)
+            shard = _st_load(shard_path, device=map_location)  # dict[str, Tensor]
+            # Keep only needed keys (defensive)
+            for k in keys:
+                t = shard.get(k, None)
+                if t is None:
+                    raise KeyError(f"Key {k} missing from shard {fname}")
+                flat[k] = t
+
+        # Re-group per leaf; re-nest meta.* using explicit '.meta.' split
+        grouped: dict[str, dict] = {}
+        for full, t in flat.items():
+            if ".meta." in full:
+                leaf, _, subk = full.partition(".meta.")
+                grouped.setdefault(leaf, {}).setdefault("meta", {})[subk] = t
+                continue
+            if "." in full:
+                leaf, key = full.rsplit(".", 1)
+            else:
+                leaf, key = full, ""
+            grouped.setdefault(leaf, {})[key] = t
+
+        # Merge sidecar non-tensors
+        sidecar_path = index_path + ".meta.json"
+        if os.path.isfile(sidecar_path):
+            with open(sidecar_path, "r", encoding="utf-8") as f:
+                meta_json = json.load(f)
+
+            import torch as _torch
+            _DTYPE_MAP = {
+                "torch.float16": _torch.float16, "float16": _torch.float16,
+                "torch.bfloat16": _torch.bfloat16, "bfloat16": _torch.bfloat16,
+                "torch.float32": _torch.float32, "float32": _torch.float32,
+                "torch.float64": _torch.float64, "float64": _torch.float64,
+                "torch.int8": _torch.int8, "int8": _torch.int8,
+                "torch.int16": _torch.int16, "int16": _torch.int16,
+                "torch.int32": _torch.int32, "int32": _torch.int32,
+                "torch.int64": _torch.int64, "int64": _torch.int64,
+            }
+
+            def _restore(x):
+                if isinstance(x, str):
+                    if x in _DTYPE_MAP:
+                        return _DTYPE_MAP[x]
+                    if x == "cpu" or x.startswith("cuda"):
+                        try:
+                            return _torch.device(x)
+                        except Exception:
+                            return x
+                    return x
+                if isinstance(x, list):
+                    return [_restore(v) for v in x]
+                if isinstance(x, dict):
+                    return {k: _restore(v) for k, v in x.items()}
+                return x
+
+            for leaf, leaf_dict in meta_json.items():
+                tgt = grouped.setdefault(leaf, {})
+                restored = _restore(leaf_dict)
+
+                # If sidecar has a nested "meta" dict, merge it into tgt["meta"]
+                meta_side = restored.pop("meta", None)
+                if meta_side:
+                    tgt.setdefault("meta", {}).update(meta_side)
+
+                # Merge any remaining top-level non-tensors
+                for k, v in restored.items():
+                    tgt[k] = v
+
+        return grouped
+
+    # ------------------------------------------------------------------------
+
     # Set-up model with the necessary data
     @classmethod
     def setup_model(cls, model):
@@ -341,9 +472,6 @@ class BaseSINQModel:
             current_device = device_map[linear_layer.name]
             # print(linear_layer.name) # the layer's name
 
-
-            # DEBUG
-            # print("current_device before SINQLinear", current_device)
             if quant_config is not None:
                 if 'awq' in quant_config['weight_quant_params']['method']:
                     layer_activations = activations.get(linear_layer.name, None)
@@ -455,6 +583,20 @@ class BaseSINQModel:
         # Save weights blob (e.g., qmodel.pt)
         cls.save_weights(weights, save_dir)
 
+    @classmethod
+    def save_quantized_safetensors(cls, model, save_dir: str, filename: str = "model.safetensors", verbose: bool = False, max_shard_size="4GB"):
+        """
+        Sharded-only: writes multiple *.safetensors shards + a HF-style index file.
+        Non-tensor meta goes to 'model.safetensors.index.json.meta.json'.
+        Note: the 'filename' arg is ignored (kept for API compatibility).
+        """
+        if _st_save is None:
+            raise ImportError("safetensors not installed. `pip install safetensors`")
+        os.makedirs(save_dir, exist_ok=True)
+        cls.cache_model(model, save_dir)
+        weights = cls.serialize_weights(model, verbose=verbose)
+        cls.save_weights_safetensors(weights, save_dir, filename=filename, max_shard_size=max_shard_size)
+
     # Main function to load a SINQ quantized model from either HF hub or locally
     @classmethod
     def from_quantized(
@@ -564,6 +706,210 @@ class BaseSINQModel:
         model.base_class = cls
         model.eval()
         return model
+
+    @classmethod
+    def save_weights_safetensors(cls, weights: dict, save_dir: str, filename: str = "model.safetensors", max_shard_size="4GB") -> None:
+        """
+        Sharded-only writer.
+        Save tensors across shards <= max_shard_size and write:
+          - model.safetensors.index.json           (tensor map)
+          - model-00001-of-000NN.safetensors, ...  (shards)
+          - model.safetensors.index.json.meta.json (non-tensors / meta)
+        Note: the 'filename' arg is ignored; we always use HF-style names.
+        """
+        if _st_save is None:
+            raise ImportError("safetensors not installed. `pip install safetensors`")
+
+        import torch as _torch
+        os.makedirs(save_dir, exist_ok=True)
+        max_bytes = _parse_size_to_bytes(max_shard_size)
+
+        # Flatten tensors; collect non-tensors into a single sidecar (per-leaf)
+        flat = {}     # key -> Tensor (to shard)
+        sidecar = {}  # leaf -> { non-tensor fields }, including meta non-tensors
+
+        def _to_jsonable(x):
+            if x is None or isinstance(x, (bool, int, float, str)):
+                return x
+            if isinstance(x, _torch.dtype) or isinstance(x, _torch.device):
+                return str(x)
+            if isinstance(x, (list, tuple)):
+                return [_to_jsonable(v) for v in x]
+            if isinstance(x, dict):
+                return {k: _to_jsonable(v) for k, v in x.items()}
+            try:
+                json.dumps(x)
+                return x
+            except TypeError:
+                return repr(x)
+
+        for leaf, sd in weights.items():
+            for k, v in sd.items():
+                # 1) meta dict — split tensors vs non-tensors
+                if k == "meta" and isinstance(v, dict):
+                    for mk, mv in v.items():
+                        if isinstance(mv, _torch.nn.Parameter):
+                            mv = mv.data
+                        if isinstance(mv, _torch.Tensor):
+                            flat[f"{leaf}.meta.{mk}"] = mv.detach().to("cpu").contiguous()
+                        else:
+                            sidecar.setdefault(leaf, {}).setdefault("meta", {})[mk] = _to_jsonable(mv)
+                    continue
+
+                # 2) Regular entries
+                if isinstance(v, _torch.nn.Parameter):
+                    v = v.data
+                if isinstance(v, _torch.Tensor):
+                    flat[f"{leaf}.{k}"] = v.detach().to("cpu").contiguous()
+                else:
+                    sidecar.setdefault(leaf, {})[k] = _to_jsonable(v)
+
+        if not flat:
+            raise ValueError("No tensor entries found to save in safetensors.")
+
+        # Greedy pack into shards (approximate by tensor.nbytes)
+        items = list(flat.items())
+        shard_maps = []   # list of dict key->Tensor for each shard
+        shard_sizes = []
+        cur_map, cur_bytes = {}, 0
+        for k, t in items:
+            nbytes = t.element_size() * t.numel()
+            if cur_map and (cur_bytes + nbytes > max_bytes):
+                shard_maps.append(cur_map); shard_sizes.append(cur_bytes)
+                cur_map, cur_bytes = {}, 0
+            cur_map[k] = t
+            cur_bytes += nbytes
+        if cur_map:
+            shard_maps.append(cur_map); shard_sizes.append(cur_bytes)
+
+        num_shards = len(shard_maps)
+        if num_shards == 0:
+            raise RuntimeError("Sharding produced zero shards.")
+
+        # Write shards + build index json (HF-style)
+        index = {
+            "metadata": {
+                "total_size": int(sum(shard_sizes)),
+            },
+            "weight_map": {}  # tensor_key -> shard filename
+        }
+
+        for i, shard in enumerate(shard_maps, start=1):
+            shard_name = f"{SAFE_WEIGHTS_BASENAME}-{i:05d}-of-{num_shards:05d}.safetensors"
+            shard_path = os.path.join(save_dir, shard_name)
+            _st_save(shard, shard_path)
+            for k in shard.keys():
+                index["weight_map"][k] = shard_name
+
+        # Write index file
+        index_path = os.path.join(save_dir, SAFE_WEIGHTS_INDEX_NAME)
+        with open(index_path, "w", encoding="utf-8") as f:
+            json.dump(index, f)
+
+        # Write single sidecar for non-tensors
+        sidecar_path = index_path + ".meta.json"
+        if sidecar:
+            with open(sidecar_path, "w", encoding="utf-8") as f:
+                json.dump(sidecar, f)
+
+    @classmethod
+    def from_quantized_safetensors(
+        cls,
+        save_dir_or_hub,
+        compute_dtype: torch.dtype = float16,
+        device="cuda",
+        filename: str = "model.safetensors",  # ignored (kept for API compatibility)
+        cache_dir: Union[str, None] = "",
+        **kwargs,
+    ):
+        """
+        Sharded-only loader that mirrors from_quantized but reads shards via index.
+        """
+        if _st_load is None:
+            raise ImportError("safetensors not installed. `pip install safetensors`")
+        if not os.path.isdir(save_dir_or_hub):
+            raise ValueError(
+                f"Expected a local directory for 'save_dir_or_hub' (got: {save_dir_or_hub})."
+            )
+        save_dir = save_dir_or_hub
+
+        model = cls.create_model(save_dir, kwargs)
+        model.save_dir = save_dir
+        cls.setup_model(model)
+
+        weights = cls.load_weights_safetensors(save_dir, map_location=device, filename=filename)
+
+        # ---- Preflight (same as from_quantized) ----
+        param_leaves = []
+        for name, module in model.named_modules():
+            if len(module._modules) == 0:
+                has_params_or_buffers = any(True for _ in module.parameters(recurse=False)) or \
+                                        any(b is not None for b in module.buffers(recurse=False))
+                if has_params_or_buffers:
+                    param_leaves.append(name)
+
+        missing = [n for n in param_leaves if n not in weights]
+        if len(missing) > 0:
+            preview = ", ".join(missing[:10])
+            raise RuntimeError(
+                f"[SINQ] {len(missing)} parameterized leaf modules are missing from saved weights "
+                f"(examples: {preview}). This will cause wrong outputs. "
+                "Fix serialize_weights() so these leaves are included."
+            )
+        # ---- End preflight ----
+
+        @torch.no_grad()
+        def _load_module(module, params=None):
+            if module.name not in weights:
+                has_params_or_buffers = any(True for _ in module.parameters(recurse=False)) or \
+                                        any(b is not None for b in module.buffers(recurse=False))
+                if has_params_or_buffers:
+                    raise RuntimeError(f"Missing weights for parameterized leaf: {module.name}")
+                module.device = device
+                return module
+
+            state_dict = weights[module.name]
+
+            if "W_q" in state_dict:
+                m = SINQLinear(
+                    linear_layer=None,
+                    quant_config=None,
+                    compute_dtype=compute_dtype,
+                    device=device,
+                )
+                m.load_state_dict(state_dict, strict=True)
+                m.device = device
+                return m
+
+            for key, tensor in state_dict.items():
+                is_param = (key in getattr(module, "_parameters", {}) and getattr(module, "_parameters")[key] is not None)
+                is_buffer = key in getattr(module, "_buffers", {})
+
+            # Regular leaf with tensors
+                if is_param:
+                    t = tensor.to(device=device, dtype=compute_dtype, non_blocking=True)
+                    setattr(module, key, nn.Parameter(t, requires_grad=False))
+                elif is_buffer:
+                    t = tensor.to(device=device, dtype=tensor.dtype, non_blocking=True)
+                    module._buffers[key] = t
+                else:
+                    t = tensor.to(device=device, non_blocking=True)
+                    setattr(module, key, t)
+
+            module.device = device
+            return module
+
+        cls.patch_model(model, _load_module, _load_module, {k: None for k in model.linear_tags})
+
+        if hasattr(cls, "post_module_load"):
+            cls.post_module_load(model, weights)
+
+        model.sinq_quantized = True
+        model.base_class = cls
+        model.eval()
+        return model
+    # -------------------------------------------------------------------------------
+
 
 class BaseSINQHFModel(BaseSINQModel):
     # Save model architecture

@@ -141,7 +141,7 @@ quant_cfg = BaseQuantizeConfig(
     method="sinq"       # quantization method ("asinq" for the calibrated version)
 )
 
-AutoSINQHFModel.quantize_model(
+qmodel = AutoSINQHFModel.quantize_model(
     model,
     tokenizer=tokenizer,
     quant_config=quant_cfg,
@@ -169,27 +169,38 @@ Here’s a summary of the main arguments you can tune:
 
 ---
 
-### Save & reload (optional)
+### Save & reload
 
-If you want to reuse a quantized model later, you can save it to disk and reload it later.
+If you want to reuse a quantized model later, save it to disk in **HF-style sharded safetensors** and reload without needing base FP weights.
 
-```python
-# --- Save to a folder ---
-from sinq.patch_model import AutoSINQHFModel
-
-save_dir = "qwen3-1.7b-sinq-4bit"  # any path
-AutoSINQHFModel.save_quantized(model, save_dir, verbose=True) # model is an already sinq-quantized model
-```
+> Requires: `pip install safetensors`
 
 ```python
-# --- Reload later (no base FP weights needed) ---
+# --- Save to a folder (sharded safetensors) ---
 from sinq.patch_model import AutoSINQHFModel
 import torch
 
-qmodel = AutoSINQHFModel.from_quantized(
+save_dir = "qwen3-1.7b-sinq-4bit"  # any path
+
+# 'model' must already be SINQ-quantized (e.g., via AutoSINQHFModel.quantize_model)
+AutoSINQHFModel.save_quantized_safetensors(
+    qmodel,
+    save_dir,
+    verbose=True,
+    max_shard_size="4GB",   # typical HF shard size (use "8GB" if you prefer)
+)
+
+```
+
+```python
+# --- Reload later--
+from sinq.patch_model import AutoSINQHFModel
+import torch
+
+qmodel = AutoSINQHFModel.from_quantized_safetensors(
     save_dir,
     device="cuda:0",
-    compute_dtype=torch.bfloat16, 
+    compute_dtype=torch.bfloat16,
 )
 
 # (optional) quick smoke test
@@ -200,6 +211,31 @@ with torch.inference_mode():
 print(tokenizer.decode(out_ids[0], skip_special_tokens=True))
 ```
 
+<details>
+<summary><strong>Alternative: save & reload as a single <code>.pt</code> file</strong> </summary>
+
+```python
+# --- Save to a folder (.pt) ---
+from sinq.patch_model import AutoSINQHFModel
+
+save_dir = "qwen3-1.7b-sinq-4bit"  # any path
+AutoSINQHFModel.save_quantized(qmodel, save_dir, verbose=True)  # creates qmodel.pt
+```
+
+```python
+# --- Reload later from .pt ---
+from sinq.patch_model import AutoSINQHFModel
+import torch
+
+qmodel = AutoSINQHFModel.from_quantized(
+    save_dir,
+    device="cuda:0",
+    compute_dtype=torch.bfloat16,
+)
+```
+
+</details>
+
 ### Compatible with [`lm-eval`](https://github.com/EleutherAI/lm-evaluation-harness) evaluation framework
 
 Below is a minimal example showing how to evaluate a SINQ-quantized model on a benchmark dataset:
@@ -209,7 +245,7 @@ from lm_eval import evaluator
 from lm_eval.models.huggingface import HFLM
 
 # Wrap the already quantized model and tokenizer with HFLM
-lm = HFLM(pretrained=model, tokenizer=tokenizer, device="cuda:0")
+lm = HFLM(pretrained=qmodel, tokenizer=tokenizer, device="cuda:0")
 
 # Evaluate (many tasks available on lm-eval such as MMLU and HellaSwag)
 results = evaluator.simple_evaluate(
@@ -307,8 +343,10 @@ We are actively expanding SINQ with new features and integrations. Stay tuned he
 - [26/09/2025] - SINQ paper released on [**arXiv**](https://arxiv.org/abs/2509.22944)
 - [30/09/2025] - SINQ GitHub repository made public  
 - [02/10/2025] - SINQ paper featured on 🤗 [**Hugging Face Papers**](https://huggingface.co/papers/2509.22944)
-- 🔜 **Coming soon** – 🤗 Integration with **Hugging Face Transformers**  
-- 🔜 **Coming soon** – 📦 Pre-quantized **SINQ models** available on Hugging Face Hub
+- 🔜 **Coming soon** - 🤗 Integration with **Hugging Face Transformers**  
+- 🔜 **Coming soon** - Pre-quantized **SINQ models** available on Hugging Face Hub
+- 🔜 **Coming soon** - Support for **Conv2D layers** and **timm models** for computer vision tasks  
+- 🔜 **Coming soon** - Support for **mixed-precision quantization** (combine multiple bitwidths for optimal accuracy-efficiency balance)  
 
 ## 6. How to Cite This Work
 
