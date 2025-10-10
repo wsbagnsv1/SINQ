@@ -30,7 +30,7 @@
 
 - [1. How does SINQ work?](#1-how-does-sinq-work)
 - [2. Why should I use SINQ?](#2-why-should-i-use-sinq)
-- <u>[3. Quantize any LLM with SINQ](#3-quantize-any-llm-with-sinq)</u>
+- <u>[3. Quantize (and save) any LLM with SINQ](#3-quantize-any-llm-with-sinq)</u>
 - [4. How to reproduce paper results](#4-how-to-reproduce-paper-results)
 - [5. Ongoing updates on new features and integrations](#5-ongoing-updates-on-new-features-and-integrations)
 - [6. How to Cite This Work](#6-how-to-cite-this-work)
