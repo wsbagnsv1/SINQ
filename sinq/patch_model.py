@@ -3,6 +3,7 @@
 import os
 import json
 import math
+import shutil
 import torch
 from torch import nn
 from torch import float16
@@ -939,16 +940,35 @@ class BaseSINQHFModel(BaseSINQModel):
     @classmethod
     def save_tokenizer_assets(cls, tokenizer, save_dir: str):
         """
-        Writes:
-          - tokenizer.json
-          - tokenizer_config.json
-          - special_tokens_map.json
-          - added_tokens.json (if any)
-          - vocab files (e.g., merges.txt/vocab.json or spiece.model, etc.)
+        Writes only:
+        - tokenizer.json
+        - vocab.json
+        - tokenizer_config.json
         """
         if tokenizer is None:
             return
-        tokenizer.save_pretrained(save_dir)
+
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Save tokenizer.json
+        tok_json = getattr(tokenizer, "tokenizer_file", None)
+        if tok_json and os.path.isfile(tok_json):
+            shutil.copy(tok_json, os.path.join(save_dir, "tokenizer.json"))
+        elif hasattr(tokenizer, "backend_tokenizer"):
+            with open(os.path.join(save_dir, "tokenizer.json"), "w", encoding="utf-8") as f:
+                f.write(tokenizer.backend_tokenizer.to_str())
+        else:
+            raise ValueError("Could not locate tokenizer.json source.")
+
+        # Save vocab.json if it exists
+        vocab_file = getattr(tokenizer, "vocab_file", None)
+        if vocab_file and os.path.isfile(vocab_file):
+            shutil.copy(vocab_file, os.path.join(save_dir, "vocab.json"))
+
+        # Save minimal tokenizer_config.json
+        config = {"tokenizer_class": tokenizer.__class__.__name__}
+        with open(os.path.join(save_dir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
 
     # Create empty model from config
     @classmethod
