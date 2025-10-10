@@ -584,7 +584,7 @@ class BaseSINQModel:
         cls.save_weights(weights, save_dir)
 
     @classmethod
-    def save_quantized_safetensors(cls, model, save_dir: str, filename: str = "model.safetensors", verbose: bool = False, max_shard_size="4GB"):
+    def save_quantized_safetensors(cls, model, tokenizer, save_dir: str, filename: str = "model.safetensors", verbose: bool = False, max_shard_size="4GB", write_tokenizer: bool = True):
         """
         Sharded-only: writes multiple *.safetensors shards + a HF-style index file.
         Non-tensor meta goes to 'model.safetensors.index.json.meta.json'.
@@ -594,8 +594,16 @@ class BaseSINQModel:
             raise ImportError("safetensors not installed. `pip install safetensors`")
         os.makedirs(save_dir, exist_ok=True)
         cls.cache_model(model, save_dir)
+        # (NEW) Save tokenizer files first so the folder is self-contained early
+        if write_tokenizer:
+            try:
+                BaseSINQHFModel.save_tokenizer_assets(tokenizer, save_dir)
+            except Exception as e:
+                if verbose:
+                    print(f"[save_quantized_safetensors] Could not save tokenizer: {e}")
         weights = cls.serialize_weights(model, verbose=verbose)
         cls.save_weights_safetensors(weights, save_dir, filename=filename, max_shard_size=max_shard_size)
+
 
     # Main function to load a SINQ quantized model from either HF hub or locally
     @classmethod
@@ -919,6 +927,21 @@ class BaseSINQHFModel(BaseSINQModel):
         model.config.architectures = [model.__class__.__name__]
         # Save config
         model.config.save_pretrained(save_dir)
+
+    # Save tokenizer assets alongside the model
+    @classmethod
+    def save_tokenizer_assets(cls, tokenizer, save_dir: str):
+        """
+        Writes:
+          - tokenizer.json
+          - tokenizer_config.json
+          - special_tokens_map.json
+          - added_tokens.json (if any)
+          - vocab files (e.g., merges.txt/vocab.json or spiece.model, etc.)
+        """
+        if tokenizer is None:
+            return
+        tokenizer.save_pretrained(save_dir)
 
     # Create empty model from config
     @classmethod

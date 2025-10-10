@@ -185,6 +185,7 @@ save_dir = "qwen3-1.7b-sinq-4bit"  # any path
 # 'model' must already be SINQ-quantized (e.g., via AutoSINQHFModel.quantize_model)
 AutoSINQHFModel.save_quantized_safetensors(
     qmodel,
+    tokenizer,
     save_dir,
     verbose=True,
     max_shard_size="4GB",   # typical HF shard size (use "8GB" if you prefer)
@@ -197,6 +198,7 @@ AutoSINQHFModel.save_quantized_safetensors(
 from sinq.patch_model import AutoSINQHFModel
 import torch
 
+tokenizer = AutoTokenizer.from_pretrained(save_dir)
 qmodel = AutoSINQHFModel.from_quantized_safetensors(
     save_dir,
     device="cuda:0",
