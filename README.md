@@ -21,7 +21,7 @@
 
 ---
 🆕 [13/10/2025]  **Info for SINQ-enthusiasts:**  
-> We’re deeply grateful for your incredible support over the past week! We’re actively working to add support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code>. In the meantime, you can star the repo to stay updated! ⭐️
+> We’re deeply grateful for your incredible support over the past week! We’re actively working to add support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code>. In the meantime, you can star and watch the repo to stay updated! ⭐️
 ---
 
 ## 🚀 Welcome to the **official SINQ repository**!
