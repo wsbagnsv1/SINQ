@@ -19,7 +19,9 @@
 
 > ⏱️ SINQ quantizes **Qwen3-14B** in just **~21 sec** and **DeepSeekV2.5-236B** in **~5 min**
 
-  
+---
+🆕 [13/10/2025]  **Info for SINQ-enthusiasts:**  
+> We’re deeply grateful for your incredible support over the past week! We’re actively working to add support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code>. In the meantime, you can star the repo to stay updated! ⭐️
 ---
 
 ## 🚀 Welcome to the **official SINQ repository**!
@@ -136,7 +138,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 quant_cfg = BaseQuantizeConfig(
     nbits=4,            # quantization bit-width
-    group_size=128,     # group size
+    group_size=64,      # group size
     tiling_mode="1D",   # tiling strategy
     method="sinq"       # quantization method ("asinq" for the calibrated version)
 )
@@ -349,7 +351,8 @@ We are actively expanding SINQ with new features and integrations. Stay tuned he
 - 🔜 **Coming soon** - 🤗 Integration with **Hugging Face Transformers**  
 - 🔜 **Coming soon** - Pre-quantized **SINQ models** available on Hugging Face Hub
 - 🔜 **Coming soon** - Support for **Conv2D layers** and **timm models** for computer vision tasks  
-- 🔜 **Coming soon** - Support for **mixed-precision quantization** (combine multiple bitwidths for optimal accuracy-efficiency balance)  
+- 🔜 **Work in progress** - Support for **mixed-precision quantization** (combine multiple bitwidths for optimal accuracy-efficiency balance)  
+- 🔜 **Work in progress** - We’re actively working to provide support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code>.
 
 ## 6. How to Cite This Work
 
