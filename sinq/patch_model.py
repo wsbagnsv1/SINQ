@@ -20,6 +20,7 @@ from pathlib import Path
 from .utils import cleanup
 from .sinqlinear import SINQLinear
 from .awq import *
+from huggingface_hub import snapshot_download
 
 # --- optional safetensors support (adds capability without changing defaults) ---
 try:
@@ -836,6 +837,11 @@ class BaseSINQModel:
         device="cuda",
         filename: str = "model.safetensors",  # ignored (kept for API compatibility)
         cache_dir: Union[str, None] = "",
+        # Optional HF Hub knobs (safe defaults)
+        revision: Union[str, None] = None,
+        local_files_only: bool = False,
+        token: Union[str, bool, None] = None,  # bool True -> use cached auth
+        allow_patterns: Union[list, None] = None,
         **kwargs,
     ):
         """
@@ -843,11 +849,41 @@ class BaseSINQModel:
         """
         if _st_load is None:
             raise ImportError("safetensors not installed. `pip install safetensors`")
-        if not os.path.isdir(save_dir_or_hub):
-            raise ValueError(
-                f"Expected a local directory for 'save_dir_or_hub' (got: {save_dir_or_hub})."
+        if os.path.isdir(save_dir_or_hub):
+            save_dir = save_dir_or_hub
+        else:
+            # Treat as HF Hub repo id
+            if snapshot_download is None:
+                raise ValueError(
+                    "huggingface_hub not installed but a repo id was provided. "
+                    "Install it with: pip install huggingface_hub"
+                )
+
+            # Keep downloads small: we only need weights + the index + config
+            # Add more patterns if your loader reads extra files
+            if allow_patterns is None:
+                allow_patterns = [
+                    "*.safetensors",
+                    "*.safetensors.index.json",
+                    "*.safetensors.index.json.meta.json",
+                    "config.json",
+                    "generation_config.json",
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                    "special_tokens_map.json",
+                ]
+
+            save_dir = snapshot_download(
+                repo_id=save_dir_or_hub,
+                revision=revision,
+                cache_dir=cache_dir or None,
+                local_files_only=local_files_only,
+                token=token,
+                allow_patterns=allow_patterns,
+                # Symlinks are fine; set False if you need real files
+                local_dir=None,
+                local_dir_use_symlinks=True,
             )
-        save_dir = save_dir_or_hub
 
         model = cls.create_model(save_dir, kwargs)
         model.save_dir = save_dir
