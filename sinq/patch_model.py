@@ -111,6 +111,20 @@ def forward_device_hooked(self, *args, **kwargs):
     # return self.__class__.forward(self, *args, **kwargs)
     return self.forward_orig(*args, **kwargs)
 
+def _retie_tied_leaves(model):
+    """
+    Restore tied weights (e.g., lm_head <-> embed_tokens) after loading.
+    This ensures they share storage again to save memory and match HF behavior.
+    """
+    core = model.model if hasattr(model, "model") else model
+
+    # Common pattern for causal LMs
+    if hasattr(model, "lm_head") and hasattr(core, "embed_tokens"):
+        try:
+            with torch.no_grad():
+                model.lm_head.weight = core.embed_tokens.weight
+        except Exception as e:
+            print(f"[retie] Could not retie lm_head -> embed_tokens: {e}")
 
 # Base patching class. Patching defines how nn.Linear and other layers are replaced via a patching function.
 class BasePatch:
@@ -228,6 +242,7 @@ class BasePatch:
 
 
 class BaseSINQModel:
+    TIED_LEAVES = {"lm_head"}
     @classmethod
     def get_config_file(cls, save_dir: str) -> str:
         return pjoin(save_dir, "config.json")
@@ -557,6 +572,8 @@ class BaseSINQModel:
             if name in ignore_keys or not _is_leaf(module):
                 continue
 
+            if name in cls.TIED_LEAVES:
+                continue
             try:
                 state = module.state_dict()
                 # If empty but the module actually owns tensors, capture directly
@@ -654,6 +671,8 @@ class BaseSINQModel:
         except Exception as e:
             print("Failed to load the weights")
             raise FileNotFoundError(f"Could not load weights from {save_dir}: {e}")
+        
+        TIED = getattr(cls, "TIED_LEAVES", set())
 
         # ---- Preflight: every parameterized leaf must have an entry in `weights`
         param_leaves = []
@@ -665,7 +684,7 @@ class BaseSINQModel:
                 if has_params_or_buffers:
                     param_leaves.append(name)
 
-        missing = [n for n in param_leaves if n not in weights]
+        missing = [n for n in param_leaves if n not in weights and n not in TIED]
         if len(missing) > 0:
             preview = ", ".join(missing[:10])
             raise RuntimeError(
@@ -683,6 +702,9 @@ class BaseSINQModel:
                 has_params_or_buffers = any(True for _ in module.parameters(recurse=False)) or \
                                         any(b is not None for b in module.buffers(recurse=False))
                 if has_params_or_buffers:
+                    if module.name in TIED:
+                        module.device = device
+                        return module
                     # Should never happen thanks to preflight
                     raise RuntimeError(f"Missing weights for parameterized leaf: {module.name}")
                 module.device = device
@@ -710,7 +732,8 @@ class BaseSINQModel:
 
                 if is_param:
                     # cast params to compute_dtype
-                    t = tensor.to(device=device, dtype=compute_dtype, non_blocking=True)
+                    target_dtype = compute_dtype if tensor.is_floating_point() else tensor.dtype
+                    t = tensor.to(device=device, dtype=target_dtype, non_blocking=True)
                     setattr(module, key, nn.Parameter(t, requires_grad=False))
                 elif is_buffer:
                     # keep original buffer dtype
@@ -731,6 +754,8 @@ class BaseSINQModel:
         if hasattr(cls, "post_module_load"):
             cls.post_module_load(model, weights)
 
+        # re-tie after modules are in place
+        _retie_tied_leaves(model)
         model.sinq_quantized = True
         model.base_class = cls
         model.eval()
@@ -917,6 +942,8 @@ class BaseSINQModel:
 
         weights = cls.load_weights_safetensors(save_dir, map_location=device, filename=filename)
 
+        TIED = getattr(cls, "TIED_LEAVES", set())
+
         # ---- Preflight (same as from_quantized) ----
         param_leaves = []
         for name, module in model.named_modules():
@@ -926,7 +953,7 @@ class BaseSINQModel:
                 if has_params_or_buffers:
                     param_leaves.append(name)
 
-        missing = [n for n in param_leaves if n not in weights]
+        missing = [n for n in param_leaves if n not in weights and n not in TIED]
         if len(missing) > 0:
             preview = ", ".join(missing[:10])
             raise RuntimeError(
@@ -942,6 +969,9 @@ class BaseSINQModel:
                 has_params_or_buffers = any(True for _ in module.parameters(recurse=False)) or \
                                         any(b is not None for b in module.buffers(recurse=False))
                 if has_params_or_buffers:
+                    if module.name in TIED:
+                        module.device = device
+                        return module
                     raise RuntimeError(f"Missing weights for parameterized leaf: {module.name}")
                 module.device = device
                 return module
@@ -965,7 +995,8 @@ class BaseSINQModel:
 
             # Regular leaf with tensors
                 if is_param:
-                    t = tensor.to(device=device, dtype=compute_dtype, non_blocking=True)
+                    target_dtype = compute_dtype if tensor.is_floating_point() else tensor.dtype
+                    t = tensor.to(device=device, dtype=target_dtype, non_blocking=True)
                     setattr(module, key, nn.Parameter(t, requires_grad=False))
                 elif is_buffer:
                     t = tensor.to(device=device, dtype=tensor.dtype, non_blocking=True)
@@ -982,6 +1013,8 @@ class BaseSINQModel:
         if hasattr(cls, "post_module_load"):
             cls.post_module_load(model, weights)
 
+        # re-tie after modules are in place
+        _retie_tied_leaves(model)
         model.sinq_quantized = True
         model.base_class = cls
         model.eval()
