@@ -261,6 +261,12 @@ class BaseSINQModel:
           - merges non-tensor sidecar from 'model.safetensors.index.json.meta.json'
         Note: the 'filename' arg is ignored in sharded mode and kept only for API compatibility.
         """
+        def _set_nested(d: dict, dotted: str, value):
+            parts = dotted.split(".") if dotted else [""]
+            cur = d
+            for p in parts[:-1]:
+                cur = cur.setdefault(p, {})
+            cur[parts[-1]] = value
         if _st_load is None:
             raise ImportError("safetensors not installed. `pip install safetensors`")
 
@@ -298,13 +304,15 @@ class BaseSINQModel:
         for full, t in flat.items():
             if ".meta." in full:
                 leaf, _, subk = full.partition(".meta.")
-                grouped.setdefault(leaf, {}).setdefault("meta", {})[subk] = t
+                tgt_meta = grouped.setdefault(leaf, {}).setdefault("meta", {})
+                _set_nested(tgt_meta, subk, t)  # <= re-nest "scale.x" into ["scale"]["x"]
                 continue
             if "." in full:
                 leaf, key = full.rsplit(".", 1)
             else:
                 leaf, key = full, ""
             grouped.setdefault(leaf, {})[key] = t
+
 
         # Merge sidecar non-tensors
         sidecar_path = index_path + ".meta.json"
@@ -347,11 +355,15 @@ class BaseSINQModel:
                 # If sidecar has a nested "meta" dict, merge it into tgt["meta"]
                 meta_side = restored.pop("meta", None)
                 if meta_side:
-                    tgt.setdefault("meta", {}).update(meta_side)
+                    tgt_meta = grouped.setdefault(leaf, {}).setdefault("meta", {})
 
-                # Merge any remaining top-level non-tensors
+                    # meta_side might contain flattened dotted keys (e.g., "scale.shape")
+                    for k, v in meta_side.items():
+                        _set_nested(tgt_meta, k, v)
+
+                # any remaining top-level non-tensors on the leaf:
                 for k, v in restored.items():
-                    tgt[k] = v
+                    grouped.setdefault(leaf, {})[k] = v
 
         return grouped
 
@@ -759,20 +771,34 @@ class BaseSINQModel:
                 return x
             except TypeError:
                 return repr(x)
+            
+        def _extract_meta(leaf: str, meta_obj, prefix: str = ""):
+            if isinstance(meta_obj, _torch.nn.Parameter):
+                meta_obj = meta_obj.data
+            if isinstance(meta_obj, _torch.Tensor):
+                flat[f"{leaf}.meta{('.' + prefix) if prefix else ''}"] = meta_obj.detach().to("cpu").contiguous()
+                return
+
+            if isinstance(meta_obj, dict):
+                for k, v in meta_obj.items():
+                    _extract_meta(leaf, v, f"{prefix}.{k}" if prefix else k)
+                return
+
+            if isinstance(meta_obj, (list, tuple)):
+                # store lists/tuples (e.g., shapes) in sidecar
+                sidecar.setdefault(leaf, {}).setdefault("meta", {})[prefix] = _to_jsonable(meta_obj)
+                return
+
+            # anything else goes to sidecar
+            sidecar.setdefault(leaf, {}).setdefault("meta", {})[prefix] = _to_jsonable(meta_obj)
 
         for leaf, sd in weights.items():
             for k, v in sd.items():
                 # 1) meta dict — split tensors vs non-tensors
                 if k == "meta" and isinstance(v, dict):
-                    for mk, mv in v.items():
-                        if isinstance(mv, _torch.nn.Parameter):
-                            mv = mv.data
-                        if isinstance(mv, _torch.Tensor):
-                            flat[f"{leaf}.meta.{mk}"] = mv.detach().to("cpu").contiguous()
-                        else:
-                            sidecar.setdefault(leaf, {}).setdefault("meta", {})[mk] = _to_jsonable(mv)
-                    continue
-
+                    if k == "meta" and isinstance(v, dict):
+                        _extract_meta(leaf, v)
+                        continue
                 # 2) Regular entries
                 if isinstance(v, _torch.nn.Parameter):
                     v = v.data

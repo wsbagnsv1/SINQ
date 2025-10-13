@@ -55,8 +55,21 @@ def rtn8(x, tile=32):
 def dq8(x):
     if x is None:
         return None
-    x, s, m, shape = x
-    return (x*s + m).view(shape)
+    # Dict form (from saved models)
+    if isinstance(x, dict):
+        xt = x["x"]; s = x["s"]; m = x["m"]; shape = x.get("shape")
+        # Guard: catch accidental stringified tensors
+        bad = [t for t in (xt, s, m) if isinstance(t, str)]
+        if bad:
+            raise ValueError("quantAux meta was serialized incorrectly: found strings in meta['scale'/'zero']. "
+                             "Ensure save_weights_safetensors() recursively extracts tensors in meta.")
+        if isinstance(shape, list):
+            shape = tuple(shape)
+        return (xt * s + m).view(shape)
+
+    # Legacy tuple form (live before save)
+    xt, s, m, shape = x
+    return (xt * s + m).view(shape)
 
 class Quantizer:
     SUPPORTED_BITS = [8, 6, 5, 4, 3, 2, 1.58, 1]
@@ -249,6 +262,13 @@ class Quantizer:
             s = meta["scale"]
             z = meta["zero"]
         s2 = meta.get("scale2", None)
+
+        # Make sure they're on W_r.device
+        dev = W_r.device
+        import torch as _torch
+        if isinstance(s, _torch.Tensor):  s = s.to(dev)
+        if isinstance(z, _torch.Tensor):  z = z.to(dev)
+        if isinstance(s2, _torch.Tensor): s2 = s2.to(dev)
 
         # 3) NFx (NF3 or NF4)
         if ("nf4" in method) or ("nf3" in method):

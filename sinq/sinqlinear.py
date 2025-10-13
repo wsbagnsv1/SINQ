@@ -187,10 +187,32 @@ class SINQLinear(nn.Module):
     def _meta_to_cpu(self, meta: dict) -> dict:
         if meta is None:
             return None
-        out = {}
-        for k, v in meta.items():
-            out[k] = v.detach().cpu() if isinstance(v, torch.Tensor) else v
-        return out
+
+        def to_cpu(v):
+            import torch
+            if isinstance(v, torch.Tensor):
+                return v.detach().cpu()
+            if isinstance(v, dict):
+                return {k: to_cpu(vi) for k, vi in v.items()}
+            if isinstance(v, (list, tuple)):
+                # Detect quantAux 4-tuple: (x, s, m, shape)
+                if (
+                    len(v) == 4
+                    and isinstance(v[0], torch.Tensor)
+                    and isinstance(v[1], torch.Tensor)
+                    and isinstance(v[2], torch.Tensor)
+                ):
+                    x, s, m, shape = v
+                    return {
+                        "x": to_cpu(x),
+                        "s": to_cpu(s),
+                        "m": to_cpu(m),
+                        "shape": list(shape),  # JSON-friendly
+                    }
+                return [to_cpu(e) for e in v]
+            return v
+
+        return {k: to_cpu(v) for k, v in meta.items()}
 
     def state_dict(self, destination=None, prefix: str = '', keep_vars: bool = False):
         """
@@ -250,6 +272,9 @@ def sinq_base_quant_config(
     if method == "asinq":
         #Re-mapping to let user use sinq_awq_l1_quantAux as asinq (A-SINQ in the paper)
         method = "sinq_awq_l1_quantAux"
+    elif method == "sinq":
+        #Re-mapping to let user use sinq_quantAux as sinq
+        method = "sinq_quantAux"
     if group_size is not None:
         assert is_divisible(
             group_size, 8
