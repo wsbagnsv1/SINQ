@@ -260,7 +260,6 @@ def sinq_base_quant_config(
     group_size: int = 64,
     quant_zero: bool = False,
     quant_scale: bool = False,
-    offload_meta: bool = False,  # meta-data should be quantized with the same settings to use offload_meta
     view_as_float: bool = False,
     axis: int = 1,
     tiling_mode: str = '1D',
@@ -270,10 +269,10 @@ def sinq_base_quant_config(
         nbits in Quantizer.SUPPORTED_BITS
     ), "nbits value not supported. Check Quantizer.SUPPORTED_BITS."
     if method == "asinq":
-        #Re-mapping to let user use sinq_awq_l1_quantAux as asinq (A-SINQ in the paper)
+        # Remap sinq_awq_l1_quantAux to behave like asinq (A-SINQ in the paper)
         method = "sinq_awq_l1_quantAux"
     elif method == "sinq":
-        #Re-mapping to let user use sinq_quantAux as sinq
+        # Remap so that users can use sinq_quantAux as sinq (scales and zeros are quantized to 8-bit)
         method = "sinq_quantAux"
     if group_size is not None:
         assert is_divisible(
@@ -282,9 +281,7 @@ def sinq_base_quant_config(
 
     weight_quant_params = {
         "nbits": nbits,
-        "channel_wise": True,
         "group_size": group_size,
-        "optimize": True,
         "round_zero": True if nbits == 4 else False,
         "axis": axis,
         "view_as_float": view_as_float,
@@ -301,12 +298,12 @@ def sinq_base_quant_config(
         )
 
     scale_quant_params = (
-        {"nbits": 8, "channel_wise": True, "group_size": 128, "optimize": False}
+        {"nbits": 8, "group_size": 128}
         if (quant_scale)
         else None
     )
     zero_quant_params = (
-        {"nbits": 8, "channel_wise": False, "group_size": None, "optimize": False}
+        {"nbits": 8, "group_size": None}
         if (quant_zero)
         else None
     )

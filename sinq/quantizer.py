@@ -121,9 +121,7 @@ class Quantizer:
         tensor: Tensor,
         layer_activations,
         nbits: float = 4,
-        channel_wise: bool = True,
         group_size: int = 64,
-        optimize: bool = True,
         round_zero: bool = False,
         axis: int = 0,
         bitpack: bool = True,
@@ -131,9 +129,13 @@ class Quantizer:
         view_as_float: bool = False,
         device: str = "cuda",
         tiling_mode: str = '1D',
-        method: str = 'dual',
+        method: str = 'sinq',
         use_unpack_kernel: bool = False
     ) -> tuple:
+        if group_size == 0:
+            group_size = None
+        if group_size < 0:
+            raise ValueError(f'Group size must be greater than or equal to 0 (a value of 0 means no grouping)!')
         assert nbits in Quantizer.SUPPORTED_BITS, (
             "nbits=" + str(nbits) + " not supported."
         )
@@ -150,7 +152,7 @@ class Quantizer:
         shape = W.shape
 
         # Reshape for grouping
-        if (group_size is not None) and channel_wise:
+        if (group_size is not None):
             W = (
                 W.reshape([-1, group_size])
                 if (axis == 1)
@@ -158,12 +160,8 @@ class Quantizer:
             )
 
         # Get min/max values
-        if not channel_wise:
-            _min, _max = W.min(), W.max()
-            optimize = False
-        else:
-            _min = W.min(axis=axis, keepdim=True)[0]
-            _max = W.max(axis=axis, keepdim=True)[0]
+        _min = W.min(axis=axis, keepdim=True)[0]
+        _max = W.max(axis=axis, keepdim=True)[0]
 
         max_v = round(2**nbits - 1)
         min_v = 0
@@ -180,24 +178,19 @@ class Quantizer:
         if round_zero:
             zero = torch.round(zero)
 
-        # Fine-tune weights
-        if optimize:
-            # DEBUG
-            # print("before optimize_weights, device: ", device)
-            W_q, scale, zero, scale2, awq_scale = Quantizer.optimize_weights(
-                tensor=W,
-                layer_activations=layer_activations,
-                scale=scale,
-                zero=zero,
-                min_max=min_max,
-                axis=axis,
-                device=device,
-                shape=shape,
-                tiling_mode=tiling_mode,
-                method=method
-            )
-        else:
-            W_q = (W * scale + zero).round_().clamp_(min_max[0], min_max[1])
+        # Use SINQ on weights
+        W_q, scale, zero, scale2, awq_scale = Quantizer.optimize_weights(
+            tensor=W,
+            layer_activations=layer_activations,
+            scale=scale,
+            zero=zero,
+            min_max=min_max,
+            axis=axis,
+            device=device,
+            shape=shape,
+            tiling_mode=tiling_mode,
+            method=method
+        )
 
         if 'quantAux' in method:
             scale = rtn8(scale)
