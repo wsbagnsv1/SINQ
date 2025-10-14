@@ -111,19 +111,18 @@ def forward_device_hooked(self, *args, **kwargs):
     # return self.__class__.forward(self, *args, **kwargs)
     return self.forward_orig(*args, **kwargs)
 
-def _retie_tied_leaves(model):
-    core = model.model if hasattr(model, "model") else model
-    if hasattr(model, "lm_head") and hasattr(core, "embed_tokens"):
+def _retie_tied_leaves(model, saved_weights: dict | None = None):
+     core = model.model if hasattr(model, "model") else model
+     if hasattr(model, "lm_head") and hasattr(core, "embed_tokens"):
         try:
-            # only retie if shapes match AND lm_head was not explicitly loaded
-            # (i.e., absent from saved weights). Easiest: detect current storage.
+            # If the user saved an explicit lm_head leaf, do NOT re-tie.
+            if saved_weights and "lm_head" in saved_weights:
+                return
             if model.lm_head.weight.data_ptr() != core.embed_tokens.weight.data_ptr() \
-               and model.lm_head.weight.shape == core.embed_tokens.weight.shape:
-                # If user saved an untied head, leave it alone.
-                # If they didn't save it (because it was tied), re-tie here:
-                model.lm_head.weight = core.embed_tokens.weight
+                and model.lm_head.weight.shape == core.embed_tokens.weight.shape:
+                 model.lm_head.weight = core.embed_tokens.weight
         except Exception as e:
-            print(f"[retie] Skipping retie: {e}")
+             print(f"[retie] Skipping retie: {e}")
 
 def _detect_tied_leaves(model) -> set[str]:
     """
@@ -733,7 +732,6 @@ class BaseSINQModel:
             # Restore from saved dict
             state_dict = weights[module.name]
 
-            # Quantized linear?
             if "W_q" in state_dict:
                 m = SINQLinear(
                     linear_layer=None,
@@ -752,8 +750,7 @@ class BaseSINQModel:
 
                 if is_param:
                     # cast params to compute_dtype
-                    target_dtype = compute_dtype if tensor.is_floating_point() else tensor.dtype
-                    t = tensor.to(device=device, dtype=target_dtype, non_blocking=True)
+                    t = tensor.to(device=device, non_blocking=True)
                     setattr(module, key, nn.Parameter(t, requires_grad=False))
                 elif is_buffer:
                     # keep original buffer dtype
@@ -775,7 +772,7 @@ class BaseSINQModel:
             cls.post_module_load(model, weights)
 
         # re-tie after modules are in place
-        _retie_tied_leaves(model)
+        _retie_tied_leaves(model, saved_weights=weights)
         model.sinq_quantized = True
         model.base_class = cls
         model.eval()
@@ -839,7 +836,7 @@ class BaseSINQModel:
 
         for leaf, sd in weights.items():
             for k, v in sd.items():
-                # 1) meta dict — split tensors vs non-tensors
+                # 1) meta dict - split tensors vs non-tensors
                 if k == "meta" and isinstance(v, dict):
                     if k == "meta" and isinstance(v, dict):
                         _extract_meta(leaf, v)
@@ -848,7 +845,8 @@ class BaseSINQModel:
                 if isinstance(v, _torch.nn.Parameter):
                     v = v.data
                 if isinstance(v, _torch.Tensor):
-                    flat[f"{leaf}.{k}"] = v.detach().to("cpu").contiguous()
+                    key = f"{leaf}.{k}" if k != "" else leaf
+                    flat[key] = v.detach().to("cpu").contiguous()
                 else:
                     sidecar.setdefault(leaf, {})[k] = _to_jsonable(v)
 
@@ -1016,8 +1014,7 @@ class BaseSINQModel:
 
             # Regular leaf with tensors
                 if is_param:
-                    target_dtype = compute_dtype if tensor.is_floating_point() else tensor.dtype
-                    t = tensor.to(device=device, dtype=target_dtype, non_blocking=True)
+                    t = tensor.to(device=device, non_blocking=True)
                     setattr(module, key, nn.Parameter(t, requires_grad=False))
                 elif is_buffer:
                     t = tensor.to(device=device, dtype=tensor.dtype, non_blocking=True)
@@ -1035,7 +1032,7 @@ class BaseSINQModel:
             cls.post_module_load(model, weights)
 
         # re-tie after modules are in place
-        _retie_tied_leaves(model)
+        _retie_tied_leaves(model, saved_weights=weights)
         model.sinq_quantized = True
         model.base_class = cls
         model.eval()
