@@ -112,19 +112,38 @@ def forward_device_hooked(self, *args, **kwargs):
     return self.forward_orig(*args, **kwargs)
 
 def _retie_tied_leaves(model):
-    """
-    Restore tied weights (e.g., lm_head <-> embed_tokens) after loading.
-    This ensures they share storage again to save memory and match HF behavior.
-    """
     core = model.model if hasattr(model, "model") else model
-
-    # Common pattern for causal LMs
     if hasattr(model, "lm_head") and hasattr(core, "embed_tokens"):
         try:
-            with torch.no_grad():
+            # only retie if shapes match AND lm_head was not explicitly loaded
+            # (i.e., absent from saved weights). Easiest: detect current storage.
+            if model.lm_head.weight.data_ptr() != core.embed_tokens.weight.data_ptr() \
+               and model.lm_head.weight.shape == core.embed_tokens.weight.shape:
+                # If user saved an untied head, leave it alone.
+                # If they didn't save it (because it was tied), re-tie here:
                 model.lm_head.weight = core.embed_tokens.weight
         except Exception as e:
-            print(f"[retie] Could not retie lm_head -> embed_tokens: {e}")
+            print(f"[retie] Skipping retie: {e}")
+
+def _detect_tied_leaves(model) -> set[str]:
+    """
+    Return the set of leaves that are actually tied *in this instance*.
+    We only check lm_head <-> embed_tokens.
+    """
+    tied = set()
+    core = model.model if hasattr(model, "model") else model
+    if hasattr(model, "lm_head") and hasattr(core, "embed_tokens"):
+        try:
+            w_head = getattr(model.lm_head, "weight", None)
+            w_tok  = getattr(core.embed_tokens, "weight", None)
+            if w_head is not None and w_tok is not None:
+                # "Tied" if they share storage
+                if w_head.data_ptr() == w_tok.data_ptr() and w_head.shape == w_tok.shape:
+                    tied.add("lm_head")
+        except Exception:
+            pass
+    return tied
+
 
 # Base patching class. Patching defines how nn.Linear and other layers are replaced via a patching function.
 class BasePatch:
@@ -564,6 +583,7 @@ class BaseSINQModel:
         """
         weights = {}
         ignore_keys = cls.get_ignore_layers(model)
+        actually_tied = _detect_tied_leaves(model)
 
         def _is_leaf(m: nn.Module) -> bool:
             return len(m._modules) == 0
@@ -572,7 +592,7 @@ class BaseSINQModel:
             if name in ignore_keys or not _is_leaf(module):
                 continue
 
-            if name in cls.TIED_LEAVES:
+            if name in actually_tied:
                 continue
             try:
                 state = module.state_dict()
@@ -672,7 +692,7 @@ class BaseSINQModel:
             print("Failed to load the weights")
             raise FileNotFoundError(f"Could not load weights from {save_dir}: {e}")
         
-        TIED = getattr(cls, "TIED_LEAVES", set())
+        DYNAMIC_TIED = _detect_tied_leaves(model)
 
         # ---- Preflight: every parameterized leaf must have an entry in `weights`
         param_leaves = []
@@ -684,7 +704,7 @@ class BaseSINQModel:
                 if has_params_or_buffers:
                     param_leaves.append(name)
 
-        missing = [n for n in param_leaves if n not in weights and n not in TIED]
+        missing = [n for n in param_leaves if (n not in weights and n not in DYNAMIC_TIED)]
         if len(missing) > 0:
             preview = ", ".join(missing[:10])
             raise RuntimeError(
@@ -702,7 +722,7 @@ class BaseSINQModel:
                 has_params_or_buffers = any(True for _ in module.parameters(recurse=False)) or \
                                         any(b is not None for b in module.buffers(recurse=False))
                 if has_params_or_buffers:
-                    if module.name in TIED:
+                    if module.name in DYNAMIC_TIED:
                         module.device = device
                         return module
                     # Should never happen thanks to preflight
@@ -942,7 +962,7 @@ class BaseSINQModel:
 
         weights = cls.load_weights_safetensors(save_dir, map_location=device, filename=filename)
 
-        TIED = getattr(cls, "TIED_LEAVES", set())
+        DYNAMIC_TIED = _detect_tied_leaves(model)
 
         # ---- Preflight (same as from_quantized) ----
         param_leaves = []
@@ -953,7 +973,8 @@ class BaseSINQModel:
                 if has_params_or_buffers:
                     param_leaves.append(name)
 
-        missing = [n for n in param_leaves if n not in weights and n not in TIED]
+        missing = [n for n in param_leaves if (n not in weights and n not in DYNAMIC_TIED)]
+
         if len(missing) > 0:
             preview = ", ".join(missing[:10])
             raise RuntimeError(
@@ -969,7 +990,7 @@ class BaseSINQModel:
                 has_params_or_buffers = any(True for _ in module.parameters(recurse=False)) or \
                                         any(b is not None for b in module.buffers(recurse=False))
                 if has_params_or_buffers:
-                    if module.name in TIED:
+                    if module.name in DYNAMIC_TIED:
                         module.device = device
                         return module
                     raise RuntimeError(f"Missing weights for parameterized leaf: {module.name}")
