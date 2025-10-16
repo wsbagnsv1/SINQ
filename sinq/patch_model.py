@@ -940,6 +940,13 @@ class BaseSINQModel:
                     "tokenizer.json",
                     "tokenizer_config.json",
                     "special_tokens_map.json",
+                    "added_tokens.json",
+                    "vocab.json",
+                    "merges.txt",
+                    "vocab.txt",
+                    "tokenizer.model",
+                    "sentencepiece.bpe.model",
+                    "spiece.model",
                 ]
 
             save_dir = snapshot_download(
@@ -1053,35 +1060,97 @@ class BaseSINQHFModel(BaseSINQModel):
     @classmethod
     def save_tokenizer_assets(cls, tokenizer, save_dir: str):
         """
-        Writes only:
-        - tokenizer.json
-        - vocab.json
-        - tokenizer_config.json
+        Persist the complete tokenizer bundle so that ALL runtime behavior
+        (incl. model_max_length, special tokens, merges/SPM, added tokens, etc.)
+        is preserved across save/load and on the Hub.
+
+        Primary path: tokenizer.save_pretrained(save_dir)
+        Fallback:     manual copy of the common files + a rich tokenizer_config.json
         """
         if tokenizer is None:
             return
 
         os.makedirs(save_dir, exist_ok=True)
 
-        # Save tokenizer.json
+        # --- Primary: let HF do the right thing
+        try:
+            tokenizer.save_pretrained(save_dir)
+            return
+        except Exception:
+            # fall back to a careful manual writer
+            pass
+
+        # --- Fallback path (manual)
+        # 1) Write tokenizer.json if we can
         tok_json = getattr(tokenizer, "tokenizer_file", None)
         if tok_json and os.path.isfile(tok_json):
             shutil.copy(tok_json, os.path.join(save_dir, "tokenizer.json"))
         elif hasattr(tokenizer, "backend_tokenizer"):
             with open(os.path.join(save_dir, "tokenizer.json"), "w", encoding="utf-8") as f:
                 f.write(tokenizer.backend_tokenizer.to_str())
-        else:
-            raise ValueError("Could not locate tokenizer.json source.")
 
-        # Save vocab.json if it exists
-        vocab_file = getattr(tokenizer, "vocab_file", None)
-        if vocab_file and os.path.isfile(vocab_file):
-            shutil.copy(vocab_file, os.path.join(save_dir, "vocab.json"))
+        # 2) Copy family-specific vocab/merges/SPM files if they exist
+        #    (covering BPE/WordPiece/SentencePiece variants)
+        possible_files = [
+            "vocab.json", "merges.txt", "vocab.txt",
+            "tokenizer.model", "sentencepiece.bpe.model", "spiece.model",
+        ]
+        for attr in ["vocab_file", "merges_file", "sp_model_file"]:
+            path = getattr(tokenizer, attr, None)
+            if path and os.path.isfile(path):
+                basename = os.path.basename(path)
+                # normalize to common HF names when possible
+                if basename.endswith(".model") and not basename.startswith("tokenizer"):
+                    basename = "tokenizer.model"
+                shutil.copy(path, os.path.join(save_dir, basename))
 
-        # Save minimal tokenizer_config.json
-        config = {"tokenizer_class": tokenizer.__class__.__name__}
+        # 3) Persist special tokens & added tokens
+        stm = getattr(tokenizer, "special_tokens_map", None)
+        if stm:
+            with open(os.path.join(save_dir, "special_tokens_map.json"), "w", encoding="utf-8") as f:
+                json.dump(stm, f, indent=2, ensure_ascii=False)
+
+        #   added tokens
+        added = []
+        try:
+            # fast/slow tokenizers expose different internals; this works broadly
+            if getattr(tokenizer, "added_tokens_encoder", None):
+                added = list(tokenizer.added_tokens_encoder.keys())
+            elif getattr(tokenizer, "added_tokens", None):
+                added = [t.content if hasattr(t, "content") else str(t)
+                         for t in tokenizer.added_tokens]
+        except Exception:
+            pass
+        if added:
+            with open(os.path.join(save_dir, "added_tokens.json"), "w", encoding="utf-8") as f:
+                json.dump(added, f, indent=2, ensure_ascii=False)
+
+        # 4) Write a rich tokenizer_config.json (include behavior-critical fields)
+        #    Note: keep keys aligned with HF to avoid surprises on load.
+        def _maybe_int(x, default=None):
+            try:
+                return int(x)
+            except Exception:
+                return default
+
+        cfg = {
+            "tokenizer_class": tokenizer.__class__.__name__,
+            "model_max_length": _maybe_int(getattr(tokenizer, "model_max_length", None)),
+            "padding_side": getattr(tokenizer, "padding_side", "right"),
+            "truncation_side": getattr(tokenizer, "truncation_side", "right"),
+            "clean_up_tokenization_spaces": getattr(tokenizer, "clean_up_tokenization_spaces", True),
+            "unk_token": getattr(getattr(tokenizer, "unk_token", None), "content", None) or getattr(tokenizer, "unk_token", None),
+            "bos_token": getattr(getattr(tokenizer, "bos_token", None), "content", None) or getattr(tokenizer, "bos_token", None),
+            "eos_token": getattr(getattr(tokenizer, "eos_token", None), "content", None) or getattr(tokenizer, "eos_token", None),
+            "pad_token": getattr(getattr(tokenizer, "pad_token", None), "content", None) or getattr(tokenizer, "pad_token", None),
+            "sep_token": getattr(getattr(tokenizer, "sep_token", None), "content", None) or getattr(tokenizer, "sep_token", None),
+            "cls_token": getattr(getattr(tokenizer, "cls_token", None), "content", None) or getattr(tokenizer, "cls_token", None),
+            "mask_token": getattr(getattr(tokenizer, "mask_token", None), "content", None) or getattr(tokenizer, "mask_token", None),
+        }
+        # drop Nones
+        cfg = {k: v for k, v in cfg.items() if v is not None}
         with open(os.path.join(save_dir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
 
     # Create empty model from config
     @classmethod
