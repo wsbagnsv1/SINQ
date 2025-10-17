@@ -22,7 +22,7 @@
 ---
 🆕 [17/10/2025] **First models on 🤗 Hugging Face Hub:**
 > We’ve started uploading our first pre-quantized models to the HF Hub and will continue adding more soon.
->  **Note: We’re actively working to add support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code> to enable fast SINQ-ference**.  
+>  **Note: We’re actively working to add support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code> to enable fast SINQ-ference** (sorry for the joke).  
 > In the meantime, you can ⭐️ **star** and **watch** the repo to stay updated!
 ---
 
