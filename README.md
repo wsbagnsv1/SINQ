@@ -20,8 +20,10 @@
 > ⏱️ SINQ quantizes **Qwen3-14B** in just **~21 sec** and **DeepSeekV2.5-236B** in **~5 min**
 
 ---
-🆕 [13/10/2025]  **Info for SINQ-enthusiasts:**  
-> We’re deeply grateful for your incredible support over the past week! We’re actively working to add support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code>. In the meantime, you can star and watch the repo to stay updated! ⭐️
+🆕 [17/10/2025] **First models on 🤗 Hugging Face Hub:**
+> We’ve started uploading our first pre-quantized models to the HF Hub and will continue adding more soon.
+>  **Note: We’re actively working to add support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code> to enable fast SINQ-ference**.  
+> In the meantime, you can ⭐️ **star** and **watch** the repo to stay updated!
 ---
 
 ## 🚀 Welcome to the **official SINQ repository**!
@@ -348,8 +350,8 @@ We are actively expanding SINQ with new features and integrations. Stay tuned he
 - [26/09/2025] - SINQ paper released on [**arXiv**](https://arxiv.org/abs/2509.22944)
 - [30/09/2025] - SINQ GitHub repository made public  
 - [02/10/2025] - SINQ paper featured on 🤗 [**Hugging Face Papers**](https://huggingface.co/papers/2509.22944)
+- [17/10/2025] - First pre-quantized **SINQ models** available on 🤗[**Hugging Face Hub**](https://huggingface.co/huawei-csl)! 🆕 
 - 🔜 **Coming soon** - 🤗 Integration with **Hugging Face Transformers**  
-- 🔜 **Coming soon** - Pre-quantized **SINQ models** available on Hugging Face Hub
 - 🔜 **Coming soon** - Support for **Conv2D layers** and **timm models** for computer vision tasks  
 - 🔜 **Work in progress** - Support for **mixed-precision quantization** (combine multiple bitwidths for optimal accuracy-efficiency balance)  
 - 🔜 **Work in progress** - We’re actively working to provide support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code>.
