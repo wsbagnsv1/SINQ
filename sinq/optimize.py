@@ -86,9 +86,25 @@ def optimize_weights_proximal_legacy(
 
     assert axis==1, 'only supports axis 1 right now'
     if tiling_mode == '1D':
-        q, s1, s2, z= tiled_quant_rectangle(W_f.reshape(shape), min_max, tile, method, awq_scale)
+        try:
+            q, s1, s2, z= tiled_quant_rectangle(W_f.reshape(shape), min_max, tile, method, awq_scale)
+        except AssertionError as e:
+            if 'block must divide W' in str(e):
+                print(f"Warning: Skipping quantization for layer with incompatible shape (block must divide W). Keeping in high precision.")
+                # Return original weight in fake quantized format
+                return W_f, torch.ones_like(W_f[:, :1]), torch.zeros_like(W_f[:, :1]), torch.ones_like(W_f[:, :1]), None
+            else:
+                raise
     elif tiling_mode == '2D':
-        q, s1, s2, z= tiled_quant_square(W_f.reshape(shape), min_max, tile, method, awq_scale)
+        try:
+            q, s1, s2, z= tiled_quant_square(W_f.reshape(shape), min_max, tile, method, awq_scale)
+        except AssertionError as e:
+            if 'block must divide W' in str(e):
+                print(f"Warning: Skipping quantization for layer with incompatible shape (block must divide W). Keeping in high precision.")
+                # Return original weight in fake quantized format
+                return W_f, torch.ones_like(W_f[:, :1]), torch.zeros_like(W_f[:, :1]), torch.ones_like(W_f[:, :1]), None
+            else:
+                raise
 
     torch.cuda.empty_cache()
 
@@ -98,3 +114,4 @@ def optimize_weights_proximal_legacy(
 
 # Default: fast with early stopping
 optimize_weights_proximal = optimize_weights_proximal_legacy
+
