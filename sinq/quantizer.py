@@ -53,6 +53,10 @@ def rtn8(x, tile=32):
     return x, scale, min, shape
 
 def dq8(x):
+    # x is already dequantized
+    if isinstance(x, torch.Tensor):
+        return x 
+
     if x is None:
         return None
     # Dict form (from saved models)

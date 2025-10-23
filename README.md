@@ -20,6 +20,13 @@
 > ⏱️ SINQ quantizes **Qwen3-14B** in just **~21 sec** and **DeepSeekV2.5-236B** in **~5 min**
 
 ---
+🆕 [23/10/2025] - Fast inference with gemlite backend 
+> Up to 7x faster than previous backend.
+> If gemlite is installed (e.g. with the new pip req.txt, intended version is 0.5.1.post1) it will automatically be used as a faster backend. 
+> This works for 1D tiling with 4-bit quantization.
+> Other settings still work with the previous backend.
+> You can enforce avoidance of the gemlite backend by adding ```_nogemlite``` to the method string (do this if you want to enforce quantized auxiliary variables).
+
 🆕 [17/10/2025] **First models on 🤗 Hugging Face Hub:**
 > We’ve started uploading our first pre-quantized models to the 🤗 [**Hugging Face Hub**](https://huggingface.co/huawei-csl) and will continue adding more soon.
 >  **Note: We’re also actively working to add support for popular frameworks such as <code>vLLM</code>, <code>SGLang</code>, and <code>llama.cpp</code> to enable fast SINQ-ference** (sorry for the joke).  
@@ -351,6 +358,7 @@ We are actively expanding SINQ with new features and integrations. Stay tuned he
 - [30/09/2025] - SINQ GitHub repository made public  
 - [02/10/2025] - SINQ paper featured on 🤗 [**Hugging Face Papers**](https://huggingface.co/papers/2509.22944)
 - [17/10/2025] - First pre-quantized **SINQ models** available on 🤗[**Hugging Face Hub**](https://huggingface.co/huawei-csl)! 🆕 
+- [23/10/2025] - Faster inference with gemlite backend (4-bit 1D tiling)
 - 🔜 **Coming soon** - 🤗 Integration with **Hugging Face Transformers**  
 - 🔜 **Coming soon** - Support for **Conv2D layers** and **timm models** for computer vision tasks  
 - 🔜 **Work in progress** - Support for **mixed-precision quantization** (combine multiple bitwidths for optimal accuracy-efficiency balance)  

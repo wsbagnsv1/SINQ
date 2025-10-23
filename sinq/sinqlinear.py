@@ -6,9 +6,18 @@ from typing import Union, Optional
 import torch
 from torch import nn, Tensor
 
-from . quantizer import Quantizer
+from .quantizer import Quantizer, dq8
 from .utils import is_divisible
 
+try:
+    import gemlite
+    has_gemlite = True
+    gemlite.set_autotune("fast")
+    gemlite.set_kernel_caching(True)
+    print('found gemlite installation')
+
+except:
+    has_gemlite = False
 
 class SINQLinear(nn.Module):
     def __init__(
@@ -22,8 +31,18 @@ class SINQLinear(nn.Module):
         layer_activations  = None
     ):
         super().__init__()
+        
+        qc = quant_config['weight_quant_params']
 
-        self.set_forward_backend("pytorch")
+        if ('nogemlite' not in qc['method'].lower()) and qc['nbits'] == 4 and qc['tiling_mode'] == '1D' and has_gemlite:
+            self.use_gemlite = True
+        else:
+            self.use_gemlite = False
+
+        if self.use_gemlite:
+            self.set_forward_backend("gemlite")
+        else:
+            self.set_forward_backend("pytorch")
 
         self.bias = None
         self.axis = None
@@ -42,10 +61,49 @@ class SINQLinear(nn.Module):
         # If we’re quantizing from a dense nn.Linear + have a config, do it now.
         # If we’re going to load pre-quantized tensors, skip initialization.
         if (self.linear_layer is not None) and (self.quant_config is not None):
-            self.initialize()
+            if self.use_gemlite:
+                self.initialize_gemlite()
+            else:
+                self.initialize()
             self.ready = True
         else:
             self.ready = False
+
+    def initialize_gemlite(self):
+        self.gemlite_linear = gemlite.GemLiteLinear(self.quant_config['weight_quant_params']['nbits'], 
+                                                    self.quant_config['weight_quant_params']['group_size'], 
+                                                    self.linear_layer.in_features,
+                                                    self.linear_layer.out_features, 
+                                                    input_dtype=gemlite.DType.FP16, 
+                                                    output_dtype=gemlite.DType.FP16)
+        
+        # gemlite.helper.warmup(shapes=[(self.linear_layer.in_features, self.linear_layer.out_features)], W_nbits=[self.quant_config['weight_quant_params']['nbits']], 
+        #                       group_sizes=[self.quant_config['weight_quant_params']['group_size']], mode='static')
+
+        if self.quant_config["weight_quant_params"]["group_size"] == None:
+            self.quant_config["weight_quant_params"]["group_size"] = (
+                self.linear_layer.in_features
+                if (self.quant_config["weight_quant_params"]["axis"] == 1)
+                else self.linear_layer.out_features
+            )
+
+        W_q, meta = Quantizer.quantize(
+            self.linear_layer.weight.data,
+            self.layer_activations,
+            device=self.device,
+            compute_dtype=self.compute_dtype,
+            **self.quant_config['weight_quant_params'],
+            use_unpack_kernel = self.use_unpack_kernel ,
+            bitpack=False       
+        )
+
+        self.s2 = meta['scale2']
+        scale = dq8(meta['scale'])
+        zero = dq8(meta['zero'])  
+        bias = None if self.linear_layer.bias is None else self.linear_layer.bias.clone().to(device=self.device, dtype=self.compute_dtype)  
+        # print(W_q.shape, self.linear_layer.weight.data.shape)
+        self.gemlite_linear.pack(W_q.to(torch.uint8), scale, zero, bias)
+        del self.linear_layer
 
     def initialize(self):
 
@@ -154,6 +212,10 @@ class SINQLinear(nn.Module):
             del meta[key]
         return W_est
 
+    def forward_gemlite(self, x:Tensor) -> Tensor:
+        out = self.gemlite_linear(self.s2*x)
+        return out
+
     def forward_pytorch(self, x: Tensor) -> Tensor:
         # DEBUG
         # print(x.device, self.dequantize().device)
@@ -172,6 +234,8 @@ class SINQLinear(nn.Module):
             cls.forward = cls.forward_pytorch
         elif backend == "ascendc":
             cls.forward = cls.forward_ascendc
+        elif backend == "gemlite":
+            cls.forward = cls.forward_gemlite
 
     def extra_repr(self) -> str:
         out = ""
