@@ -48,6 +48,295 @@ def _parse_size_to_bytes(x) -> int:
 _QUANT_LAYERS = [nn.Linear, SINQLinear]
 _IGNORE_LINEAR = ["lm_head"]
 
+# AutoModel patching globals
+_patch_applied = False
+_registered_custom_configs = {}
+_registered_custom_models = {}
+
+
+def register_custom_model_components(model_dir, trust_remote_code=True):
+    """
+    Register all custom model components from a model directory.
+    This handles complex models with multiple custom sub-components.
+
+    Args:
+        model_dir: Path to model directory containing custom files
+        trust_remote_code: Whether to trust remote code during registration
+    """
+    import sys
+    import os
+    import importlib.util
+
+    # Ensure model_dir is absolute and valid
+    if not os.path.isabs(model_dir):
+        model_dir = os.path.abspath(model_dir)
+
+    if not os.path.exists(model_dir):
+        print(f"Warning: Model directory does not exist: {model_dir}")
+        return
+
+    # Add model directory to Python path
+    if model_dir not in sys.path:
+        sys.path.insert(0, model_dir)
+
+    # Store registered classes for later use
+    global _registered_custom_configs, _registered_custom_models
+    if '_registered_custom_configs' not in globals():
+        _registered_custom_configs = {}
+        _registered_custom_models = {}
+
+    # Look for and register custom configuration files
+    config_files = [f for f in os.listdir(model_dir)
+                    if f.endswith('.py') and (f.startswith('configuration_') or f.endswith('_configuration.py'))]
+    for config_file in config_files:
+        try:
+            module_name = config_file.replace('.py', '')
+            spec = importlib.util.spec_from_file_location(module_name, os.path.join(model_dir, config_file))
+            config_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(config_module)
+            print(f"Registered custom config: {config_file}")
+
+            # Store all config classes in global registry
+            for attr_name in dir(config_module):
+                attr = getattr(config_module, attr_name)
+                if (hasattr(attr, '__class__') and
+                    hasattr(attr, '__bases__') and
+                    attr_name.endswith('Config') and
+                    not attr_name.startswith('_')):
+                    _registered_custom_configs[attr_name] = attr
+                    print(f"Stored custom config class: {attr_name}")
+
+        except Exception as e:
+            print(f"Warning: Could not register {config_file}: {e}")
+
+    # Look for and register custom modeling files
+    modeling_files = [f for f in os.listdir(model_dir) if f.endswith('_modeling.py') or f.startswith('modeling_')]
+    for modeling_file in modeling_files:
+        try:
+            module_name = modeling_file.replace('.py', '')
+            spec = importlib.util.spec_from_file_location(module_name, os.path.join(model_dir, modeling_file))
+            modeling_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(modeling_module)
+            print(f"Registered custom modeling: {modeling_file}")
+
+            # Store all model classes in global registry
+            for attr_name in dir(modeling_module):
+                attr = getattr(modeling_module, attr_name)
+                if (hasattr(attr, '__bases__') and
+                    attr_name not in ['__module__', '__doc__'] and
+                    not attr_name.startswith('_')):
+                    try:
+                        from transformers import PreTrainedModel
+                        if (isinstance(attr, type) and
+                            issubclass(attr, PreTrainedModel) and
+                            attr != PreTrainedModel):
+                            _registered_custom_models[attr_name] = attr
+                            print(f"Stored custom model class: {attr_name}")
+                    except:
+                        pass  # Not a model class, skip
+
+        except Exception as e:
+            print(f"Warning: Could not register {modeling_file}: {e}")
+
+    # Also try to register the main modeling file
+    main_modeling_files = [f for f in os.listdir(model_dir) if 'modeling' in f and f.endswith('.py')]
+    for main_file in main_modeling_files:
+        try:
+            module_name = main_file.replace('.py', '')
+            spec = importlib.util.spec_from_file_location(module_name, os.path.join(model_dir, main_file))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            print(f"Registered main modeling file: {main_file}")
+        except Exception as e:
+            print(f"Warning: Could not register main file {main_file}: {e}")
+
+
+def patch_transformers_automodel():
+    """
+    Monkey patch transformers AutoModel to handle custom configuration classes
+    """
+    global _patch_applied
+    if _patch_applied:
+        return  # Already patched
+
+    import sys
+    import os
+    from transformers import AutoModel
+    original_from_config = AutoModel.from_config
+
+    def enhanced_from_config(config, **kwargs):
+        try:
+            return original_from_config(config, **kwargs)
+        except ValueError as e:
+            if "Unrecognized configuration class" in str(e):
+                print(f"Caught unrecognized config error for: {config.__class__.__name__}")
+
+                # Try to use our stored custom classes directly
+                config_class_name = config.__class__.__name__
+                global _registered_custom_configs, _registered_custom_models
+
+                try:
+                    # Check if we have this config class in our registry
+                    if '_registered_custom_configs' in globals() and config_class_name in _registered_custom_configs:
+                        print(f"Found custom config class in registry: {config_class_name}")
+
+                        # Try to find the corresponding model class
+                        # Try multiple naming strategies to find the model class
+                        possible_model_names = [
+                            config_class_name.replace('Config', ''),  # Remove 'Config' suffix
+                            config_class_name.replace('Config', 'Model'),  # Replace 'Config' with 'Model'
+                            config_class_name.replace('Config', 'PreTrainedModel'),  # Replace 'Config' with 'PreTrainedModel'
+                            config_class_name,  # Try the exact name
+                            config_class_name + 'Model',  # Add 'Model' suffix
+                            config_class_name + 'PreTrainedModel',  # Add 'PreTrainedModel' suffix
+                        ]
+
+                        found_model_class = None
+                        for candidate_name in possible_model_names:
+                            if '_registered_custom_models' in globals() and candidate_name in _registered_custom_models:
+                                print(f"Found custom model class in registry: {candidate_name}")
+                                found_model_class = _registered_custom_models[candidate_name]
+                                break
+
+                        if found_model_class:
+                            # Create model instance directly
+                            return found_model_class.from_config(config, **kwargs)
+                        else:
+                            print(f"Custom model class not found. Tried: {possible_model_names}")
+                            print(f"Available models: {list(_registered_custom_models.keys()) if '_registered_custom_models' in globals() else []}")
+
+                            # Try to find and register the appropriate custom model
+                            config_module = config.__class__.__module__
+                            print(f"Config module: {config_module}")
+
+                            if 'transformers_modules' in config_module:
+                                # Extract model name from module path
+                                model_path = config_module.split('.')[1]  # e.g., "Ovis2_dot_5_hyphen_2B_hyphen_4bit_hyphen_sinq"
+                                print(f"Model path: {model_path}")
+
+                                # Try to find the model directory
+                                possible_dirs = []
+
+                                # Try different approaches to find model directory
+                                if hasattr(config.__class__, '__module__') and config.__class__.__module__:
+                                    module = sys.modules.get(config.__class__.__module__)
+                                    if module and hasattr(module, '__file__'):
+                                        module_file = module.__file__
+                                        print(f"Module file: {module_file}")
+                                        possible_dirs.append(os.path.dirname(module_file))
+                                        possible_dirs.append(os.path.dirname(os.path.dirname(module_file)))
+
+                                # Also try to get from the registered modules
+                                for name, module in sys.modules.items():
+                                    if config_module in name and hasattr(module, '__file__'):
+                                        module_file = module.__file__
+                                        print(f"Found module in sys.modules: {name} -> {module_file}")
+                                        possible_dirs.append(os.path.dirname(module_file))
+
+                                # Also try to extract from HF cache pattern
+                                if 'transformers_modules' in config_module:
+                                    try:
+                                        import transformers
+                                        cache_dir = transformers.TRANSFORMERS_CACHE
+                                        if cache_dir:
+                                            potential_model_dir = os.path.join(cache_dir, model_path)
+                                            possible_dirs.append(potential_model_dir)
+                                            print(f"Trying cache dir: {potential_model_dir}")
+                                    except:
+                                        pass
+
+                                # Remove duplicates and try each directory
+                                possible_dirs = list(set(possible_dirs))
+                                print(f"Possible directories to check: {possible_dirs}")
+
+                                for model_dir in possible_dirs:
+                                    if model_dir and os.path.exists(model_dir):
+                                        print(f"Attempting to register from: {model_dir}")
+                                        register_custom_model_components(model_dir)
+                                        print(f"Registered custom components from: {model_dir}")
+                                        break
+                                    else:
+                                        print(f"Directory does not exist: {model_dir}")
+
+                                # Try AutoModel again after registration
+                                return original_from_config(config, **kwargs)
+                    else:
+                        print(f"Custom config class {config_class_name} not found in registry")
+
+                except Exception as reg_e:
+                    print(f"Warning: Could not register custom components: {reg_e}")
+                    import traceback
+                    traceback.print_exc()
+
+            # Re-raise original error if we couldn't fix it
+            raise e
+
+    AutoModel.from_config = enhanced_from_config
+    _patch_applied = True
+    print("AutoModel monkey patch applied successfully")
+
+
+# AutoModel patch will be applied selectively when needed, not on import
+# This prevents interference with normal model loading
+
+def register_model_components(model_dir: str, trust_remote_code: bool = True):
+    """
+    Public function to register custom model components for a specific model directory.
+    This should be called before loading models that have custom components.
+
+    Args:
+        model_dir: Path to the model directory containing custom components
+        trust_remote_code: Whether to trust remote code during registration
+    """
+    try:
+        print(f"[REGISTER] Registering custom components for: {model_dir}")
+        register_custom_model_components(model_dir, trust_remote_code=trust_remote_code)
+        patch_transformers_automodel()
+        print(f"[REGISTER] Successfully registered custom components and applied AutoModel patch")
+        return True
+    except Exception as e:
+        print(f"[REGISTER] Failed to register custom components: {e}")
+        return False
+
+
+# Auto-registration trigger when AutoSINQHFModel is imported
+def _auto_register_on_import():
+    """
+    Automatically register custom model components when AutoSINQHFModel is imported.
+    This ensures custom models like Ovis2.5 can be loaded properly without modifying quant.py
+    """
+    try:
+        # Look for common model directories that might contain custom components
+        potential_paths = [
+            r"G:\testingRing\Ovis2.5-2B",
+            r"G:/testingRing/Ovis2.5-2B",
+            "G:\\testingRing\\Ovis2.5-2B",
+            # Add other common paths as needed
+        ]
+
+        registered_any = False
+        for path in potential_paths:
+            if os.path.exists(path):
+                # Check if this directory has custom components
+                config_files = [f for f in os.listdir(path) if f.startswith('configuration_')]
+                modeling_files = [f for f in os.listdir(path) if f.startswith('modeling_')]
+
+                if config_files or modeling_files:
+                    print(f"[AUTO-REGISTER] Found model with custom components: {path}")
+                    if register_model_components(path):
+                        registered_any = True
+                        break  # Stop after finding and registering the first one
+
+        if not registered_any:
+            # If no common paths found, don't register anything (avoids interference)
+            pass
+
+    except Exception as e:
+        print(f"[AUTO-REGISTER] Auto-registration failed: {e}")
+
+# Apply auto-registration when module is imported (but only for specific models)
+_auto_register_on_import()
+
 
 # Finds the parent of a node module named "name"
 def find_parent(model, name: str) -> nn.Module:
@@ -421,7 +710,33 @@ class BaseSINQModel:
         use_unpack_kernel: bool = True,
         skip_tensors: list = None,  # Allow tensors to be skipped
         custom_model_class=None,  # Allow custom model class for saving/loading compatibility
+        model_path=None,  # Model path for custom component registration
     ):
+        # Handle custom model registration
+        # Always register if model_path is provided, to handle models with custom components like Ovis2.5
+        if model_path is not None:
+            print(f"[DEBUG] Model path provided: {model_path}")
+            if custom_model_class is not None:
+                print(f"[DEBUG] Custom model class also provided: {custom_model_class}")
+            else:
+                print("[DEBUG] No custom model class provided, but registering components anyway for model compatibility")
+
+            try:
+                print("Registering custom model components for quantization...")
+                register_custom_model_components(model_path, trust_remote_code=True)
+                print("Successfully registered custom model components")
+
+                # Apply monkey patch for AutoModel to handle custom configs
+                patch_transformers_automodel()
+                print("Applied AutoModel monkey patch for custom configuration classes")
+
+            except Exception as e:
+                print(f"Warning: Could not register custom components: {e}")
+        else:
+            print("[DEBUG] No model path provided, using standard quantization flow")
+            if custom_model_class is not None:
+                print(f"[WARNING] custom_model_class provided ({custom_model_class}) but no model_path given for component registration")
+
         # Check if the model was already quantized
         if getattr(model, "sinq_quantized", False):
             print("Model was already quantized")
@@ -550,18 +865,56 @@ class BaseSINQModel:
             # print(linear_layer.name) # the layer's name
 
             if quant_config is not None:
-                if 'awq' in quant_config['weight_quant_params']['method']:
-                    layer_activations = activations.get(linear_layer.name, None)
+                # Check if this layer should be skipped based on user-provided skip_tensors
+                if skip_tensors is not None:
+                    if any(skip_pattern in linear_layer.name for skip_pattern in skip_tensors):
+                        print(f"[SKIP QUANT] Layer {linear_layer.name}: Explicitly skipped via skip_tensors list")
+                        out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
+                    else:
+                        try:
+                            if 'awq' in quant_config['weight_quant_params']['method']:
+                                layer_activations = activations.get(linear_layer.name, None)
+                            else:
+                                layer_activations = None
+                            out_module = SINQLinear(
+                                linear_layer,
+                                quant_config,
+                                compute_dtype=compute_dtype,
+                                device=current_device,
+                                use_unpack_kernel = use_unpack_kernel,
+                                layer_activations = layer_activations
+                            )
+                        except ValueError as e:
+                            # Check if this is our special skip signal
+                            if "QUANT_SKIP_LAYERS:" in str(e):
+                                print(f"[SKIP QUANT] Layer {linear_layer.name}: {str(e).split('QUANT_SKIP_LAYERS: ')[1]}")
+                                out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
+                            else:
+                                # Re-raise other ValueError exceptions
+                                raise
                 else:
-                    layer_activations = None
-                out_module = SINQLinear(
-                    linear_layer,
-                    quant_config,
-                    compute_dtype=compute_dtype,
-                    device=current_device,
-                    use_unpack_kernel = use_unpack_kernel,
-                    layer_activations = layer_activations
-                )
+                    # No skip list provided, quantize all layers
+                    try:
+                        if 'awq' in quant_config['weight_quant_params']['method']:
+                            layer_activations = activations.get(linear_layer.name, None)
+                        else:
+                            layer_activations = None
+                        out_module = SINQLinear(
+                            linear_layer,
+                            quant_config,
+                            compute_dtype=compute_dtype,
+                            device=current_device,
+                            use_unpack_kernel = use_unpack_kernel,
+                            layer_activations = layer_activations
+                        )
+                    except ValueError as e:
+                        # Check if this is our special skip signal
+                        if "QUANT_SKIP_LAYERS:" in str(e):
+                            print(f"[SKIP QUANT] Layer {linear_layer.name}: {str(e).split('QUANT_SKIP_LAYERS: ')[1]}")
+                            out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
+                        else:
+                            # Re-raise other ValueError exceptions
+                            raise
             else:
                 out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
 
@@ -1244,6 +1597,19 @@ class BaseSINQHFModel(BaseSINQModel):
         for key in ["attn_implementation"]:
             if key in kwargs:
                 model_kwargs[key] = kwargs[key]
+
+        # NEW: Register all custom components before model creation for custom models
+        if custom_model_class is not None:
+            try:
+                register_custom_model_components(save_dir, trust_remote_code=kwargs.get('trust_remote_code', True))
+                print("Successfully registered custom model components")
+
+                # Apply monkey patch for AutoModel to handle custom configs
+                patch_transformers_automodel()
+                print("Applied AutoModel monkey patch for custom configuration classes")
+
+            except Exception as e:
+                print(f"Warning: Could not register custom components: {e}")
 
         config = transformers.AutoConfig.from_pretrained(save_dir)
         

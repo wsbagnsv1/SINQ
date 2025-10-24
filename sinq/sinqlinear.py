@@ -1,6 +1,8 @@
 # modified by SINQ authors 2025
 
 import copy
+import time
+import threading
 from typing import Union, Optional
 
 import torch
@@ -43,6 +45,17 @@ class SINQLinear(nn.Module):
         else:
             self.use_gemlite = False
 
+        # Pre-check for GemLite compatibility before initialization
+        if self.use_gemlite and linear_layer is not None:
+            # Check if dimensions are compatible with GemLite
+            in_features = linear_layer.in_features
+            group_size = qc.get('group_size', in_features)
+
+            # GemLite requires in_features to be divisible by 32 or the group_size
+            if (in_features % 32 != 0) and (in_features % group_size != 0):
+                print(f"[GEMSKIP] Layer {linear_layer if hasattr(linear_layer, 'name') else 'unknown'}: Incompatible dimensions for GemLite ({in_features} features, group_size={group_size}) - forcing PyTorch backend")
+                self.use_gemlite = False
+
         if self.use_gemlite:
             self.set_forward_backend("gemlite")
         else:
@@ -62,8 +75,8 @@ class SINQLinear(nn.Module):
         self.meta = None
         self.layer_activations = layer_activations
 
-        # If we’re quantizing from a dense nn.Linear + have a config, do it now.
-        # If we’re going to load pre-quantized tensors, skip initialization.
+        # If we're quantizing from a dense nn.Linear + have a config, do it now.
+        # If we're going to load pre-quantized tensors, skip initialization.
         if (self.linear_layer is not None) and (self.quant_config is not None):
             if self.use_gemlite:
                 self.initialize_gemlite()
@@ -74,11 +87,11 @@ class SINQLinear(nn.Module):
             self.ready = False
 
     def initialize_gemlite(self):
-        self.gemlite_linear = gemlite.GemLiteLinear(self.quant_config['weight_quant_params']['nbits'], 
-                                                    self.quant_config['weight_quant_params']['group_size'], 
+        self.gemlite_linear = gemlite.GemLiteLinear(self.quant_config['weight_quant_params']['nbits'],
+                                                    self.quant_config['weight_quant_params']['group_size'],
                                                     self.linear_layer.in_features,
-                                                    self.linear_layer.out_features, 
-                                                    input_dtype=gemlite.DType.FP16, 
+                                                    self.linear_layer.out_features,
+                                                    input_dtype=gemlite.DType.FP16,
                                                     output_dtype=gemlite.DType.FP16)
         
         # gemlite.helper.warmup(shapes=[(self.linear_layer.in_features, self.linear_layer.out_features)], W_nbits=[self.quant_config['weight_quant_params']['nbits']], 
@@ -181,32 +194,54 @@ class SINQLinear(nn.Module):
         W_q, meta = self.W_q, self.meta
         device = W_q.device
 
-        del_keys = set()
+        try:
+            del_keys = set()
 
-        # Zero/Scale packed together
-        if "zero_scale" in meta:
-            zero_scale = meta["zero_scale"].to(device=device)
+            # Zero/Scale packed together
+            if "zero_scale" in meta:
+                zero_scale = meta["zero_scale"].to(device=device)
 
-            if zero_scale.dtype == torch.uint8:
-                meta["zero_q"], meta["scale_q"] = zero_scale[0], zero_scale[1]
-                del_keys.update({"zero_q", "scale_q"})
-            else:
-                meta["zero"], meta["scale"] = zero_scale[0], zero_scale[1]
-                del_keys.update({"zero", "scale"})
+                if zero_scale.dtype == torch.uint8:
+                    meta["zero_q"], meta["scale_q"] = zero_scale[0], zero_scale[1]
+                    del_keys.update({"zero_q", "scale_q"})
+                else:
+                    meta["zero"], meta["scale"] = zero_scale[0], zero_scale[1]
+                    del_keys.update({"zero", "scale"})
 
-        if meta["quant_zero"]:
-            meta["zero"] = Quantizer.dequantize(
-                meta["zero_q"].to(device=device), meta["meta_zero"]
-            )
-            del_keys.add("zero")
+            if meta["quant_zero"]:
+                meta["zero"] = Quantizer.dequantize(
+                    meta["zero_q"].to(device=device), meta["meta_zero"]
+                )
+                del_keys.add("zero")
 
-        if meta["quant_scale"]:
-            meta["scale"] = Quantizer.dequantize(
-                meta["scale_q"].to(device=device), meta["meta_scale"]
-            )
-            del_keys.add("scale")
+            if meta["quant_scale"]:
+                meta["scale"] = Quantizer.dequantize(
+                    meta["scale_q"].to(device=device), meta["meta_scale"]
+                )
+                del_keys.add("scale")
 
-        W_est = Quantizer.dequantize(W_q, meta, use_unpack_kernel=self.use_unpack_kernel)
+            W_est = Quantizer.dequantize(W_q, meta, use_unpack_kernel=self.use_unpack_kernel)
+        except RuntimeError as e:
+            print(f"[SINQ ERROR] RuntimeError in dequantize: {e}")
+            # print(f"[SINQ DEBUG] W_q shape: {W_q.shape}, device: {W_q.device}")
+            # print(f"[SINQ DEBUG] Meta keys: {list(meta.keys())}")
+            # print(f"[SINQ DEBUG] Quantization method: {meta.get('method', 'unknown')}")
+            # print(f"[SINQ DEBUG] Expected shape from meta: {meta.get('shape', 'unknown')}")
+
+            # Specific handling for tensor size mismatch
+            if "must match the size of tensor" in str(e):
+                print(f"[SINQ SPECIFIC] Tensor size mismatch detected!")
+                print(f"[SINQ SPECIFIC] This indicates incompatible quantized weight dimensions")
+                print(f"[SINQ SPECIFIC] W_q shape: {W_q.shape}")
+                print(f"[SINQ SPECIFIC] Expected shape: {meta.get('shape', 'unknown')}")
+                print(f"[SINQ SPECIFIC] Layer features - in: {getattr(self, 'in_features', 'unknown')}, out: {getattr(self, 'out_features', 'unknown')}")
+                print(f"[SINQ SPECIFIC] This may be due to:")
+                print(f"[SINQ SPECIFIC] 1. Incorrect model loading/quantization")
+                print(f"[SINQ SPECIFIC] 2. Mismatched model architecture")
+                print(f"[SINQ SPECIFIC] 3. Corrupted quantized weights")
+
+            print(f"[SINQ DEBUG] Dequantization failed - this may indicate corrupted quantized weights")
+            raise
 
         # DEBUG
         # print("W_q.device", W_est.device)
@@ -217,17 +252,52 @@ class SINQLinear(nn.Module):
         return W_est
 
     def forward_gemlite(self, x:Tensor) -> Tensor:
-        out = self.gemlite_linear(self.s2*x)
-        return out
+        try:
+            out = self.gemlite_linear(self.s2*x)
+            return out
+        except RuntimeError as e:
+            print(f"[SINQ ERROR] RuntimeError in forward_gemlite: {e}")
+            # print(f"[SINQ DEBUG] Input shape: {x.shape}, device: {x.device}")
+            # print(f"[SINQ DEBUG] Layer info - in_features: {getattr(self, 'in_features', 'unknown')}, out_features: {getattr(self, 'out_features', 'unknown')}")
+            # print(f"[SINQ DEBUG] GemLite backend failed - this may indicate a GemLite-specific issue")
+            raise
 
     def forward_pytorch(self, x: Tensor) -> Tensor:
         # DEBUG
         # print(x.device, self.dequantize().device)
 
-        out = torch.matmul(x, self.dequantize().t())
-        if self.bias is not None:
-            out += self.bias
-        return out
+        try:
+            # Debug the dequantization process step by step
+            dequantized_weights = self.dequantize()
+            # print(f"[SINQ DEBUG] Dequantized weights shape: {dequantized_weights.shape}")
+            # print(f"[SINQ DEBUG] Input shape: {x.shape}")
+            # print(f"[SINQ DEBUG] About to transpose weights...")
+
+            transposed_weights = dequantized_weights.t()
+            # print(f"[SINQ DEBUG] Transposed weights shape: {transposed_weights.shape}")
+
+            # print(f"[SINQ DEBUG] About to perform matmul: {x.shape} @ {transposed_weights.shape}")
+            out = torch.matmul(x, transposed_weights)
+
+            if self.bias is not None:
+                # print(f"[SINQ DEBUG] Adding bias...")
+                out += self.bias
+            return out
+        except RuntimeError as e:
+            print(f"[SINQ ERROR] RuntimeError in forward_pytorch: {e}")
+            print(f"[SINQ DEBUG] Input shape: {x.shape}, device: {x.device}")
+            print(f"[SINQ DEBUG] Layer info - in_features: {getattr(self, 'in_features', 'unknown')}, out_features: {getattr(self, 'out_features', 'unknown')}")
+            print(f"[SINQ DEBUG] Using device: {getattr(self, 'device', 'unknown')}")
+            if hasattr(self, 'W_q') and self.W_q is not None:
+                print(f"[SINQ DEBUG] W_q shape: {self.W_q.shape}, device: {self.W_q.device}")
+
+            # Specific handling for tensor size mismatch
+            if "must match the size of tensor" in str(e):
+                print(f"[SINQ SPECIFIC] Tensor size mismatch in forward_pytorch matmul!")
+                print(f"[SINQ SPECIFIC] This suggests incompatible input/weight dimensions")
+                print(f"[SINQ SPECIFIC] Input: {x.shape}, Expected weight shape: [*, {getattr(self, 'in_features', 'unknown')}]")
+
+            raise
 
     def forward_ascendc(self, x: Tensor) -> Tensor:
         raise NotImplementedError
@@ -385,4 +455,3 @@ def sinq_base_quant_config(
 
 # Alias: follow similar Auto-GPTQ naming
 BaseQuantizeConfig = sinq_base_quant_config
-

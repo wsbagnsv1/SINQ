@@ -90,9 +90,9 @@ def optimize_weights_proximal_legacy(
             q, s1, s2, z= tiled_quant_rectangle(W_f.reshape(shape), min_max, tile, method, awq_scale)
         except AssertionError as e:
             if 'block must divide W' in str(e):
-                print(f"Warning: Skipping quantization for layer with incompatible shape (block must divide W). Keeping in high precision.")
-                # Return original weight in fake quantized format
-                return W_f, torch.ones_like(W_f[:, :1]), torch.zeros_like(W_f[:, :1]), torch.ones_like(W_f[:, :1]), None
+                print(f"Warning: Skipping quantization for layer with incompatible shape (block must divide W). This layer will remain in high precision.")
+                # Return None to signal that this layer should not be quantized
+                return None
             else:
                 raise
     elif tiling_mode == '2D':
@@ -100,9 +100,9 @@ def optimize_weights_proximal_legacy(
             q, s1, s2, z= tiled_quant_square(W_f.reshape(shape), min_max, tile, method, awq_scale)
         except AssertionError as e:
             if 'block must divide W' in str(e):
-                print(f"Warning: Skipping quantization for layer with incompatible shape (block must divide W). Keeping in high precision.")
-                # Return original weight in fake quantized format
-                return W_f, torch.ones_like(W_f[:, :1]), torch.zeros_like(W_f[:, :1]), torch.ones_like(W_f[:, :1]), None
+                print(f"Warning: Skipping quantization for layer with incompatible shape (block must divide W). This layer will remain in high precision.")
+                # Return None to signal that this layer should not be quantized
+                return None
             else:
                 raise
 
