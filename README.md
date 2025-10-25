@@ -20,12 +20,6 @@
 > ⏱️ SINQ quantizes **Qwen3-14B** in just **~21 sec** and **DeepSeekV2.5-236B** in **~5 min**
 
 ---
-🆕 [23/10/2025] - Fast inference with gemlite backend 
-> Up to 7x faster than previous backend.
-> If gemlite is installed (e.g. with the new pip req.txt, intended version is 0.5.1.post1) it will automatically be used as a faster backend. 
-> This works for 1D tiling with 4-bit quantization.
-> Other settings still work with the previous backend.
-> You can enforce avoidance of the gemlite backend by adding ```_nogemlite``` to the method string (do this if you want to enforce quantized auxiliary variables).
 
 🆕 [17/10/2025] **First models on 🤗 Hugging Face Hub:**
 > We’ve started uploading our first pre-quantized models to the 🤗 [**Hugging Face Hub**](https://huggingface.co/huawei-csl) and will continue adding more soon.
