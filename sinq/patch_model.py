@@ -421,6 +421,7 @@ class BaseSINQModel:
         use_unpack_kernel: bool = True,
         skip_tensors: list = None,  # Allow tensors to be skipped
         custom_model_class=None,  # Allow custom model class for saving/loading compatibility
+        verbose: bool = False,  # Control verbose output
     ):
         # Check if the model was already quantized
         if getattr(model, "sinq_quantized", False):
@@ -550,20 +551,61 @@ class BaseSINQModel:
             # print(linear_layer.name) # the layer's name
 
             if quant_config is not None:
-                if 'awq' in quant_config['weight_quant_params']['method']:
-                    layer_activations = activations.get(linear_layer.name, None)
+                # Check if this layer should be skipped based on user-provided skip_tensors
+                if skip_tensors is not None:
+                    if any(skip_pattern in linear_layer.name for skip_pattern in skip_tensors):
+                        if verbose:
+                            print(f"[SKIP QUANT] Layer {linear_layer.name}: Explicitly skipped via skip_tensors list")
+                        out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
+                    else:
+                        try:
+                            if 'awq' in quant_config['weight_quant_params']['method']:
+                                layer_activations = activations.get(linear_layer.name, None)
+                            else:
+                                layer_activations = None
+                            out_module = SINQLinear(
+                                linear_layer,
+                                quant_config,
+                                compute_dtype=compute_dtype,
+                                device=current_device,
+                                use_unpack_kernel = use_unpack_kernel,
+                                layer_activations = layer_activations,
+                                custom_model_class = current_custom_model_class
+                            )3
+                        except ValueError as e:
+                            # Check if this is our special skip signal
+                            if "QUANT_SKIP_LAYERS:" in str(e):
+                                if verbose:
+                                    print(f"[SKIP QUANT] Layer {linear_layer.name}: {str(e).split('QUANT_SKIP_LAYERS: ')[1]}")
+                                out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
+                            else:
+                                # Re-raise other ValueError exceptions
+                                raise
                 else:
-                    layer_activations = None
-                out_module = SINQLinear(
-                    linear_layer,
-                    quant_config,
-                    compute_dtype=compute_dtype,
-                    device=current_device,
-                    use_unpack_kernel = use_unpack_kernel,
-                    layer_activations = layer_activations
-                )
-            else:
-                out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
+                    # No skip list provided, quantize all layers
+                    try:
+                        if 'awq' in quant_config['weight_quant_params']['method']:
+                            layer_activations = activations.get(linear_layer.name, None)
+                        else:
+                            layer_activations = None
+                        out_module = SINQLinear(
+                            linear_layer,
+                            quant_config,
+                            compute_dtype=compute_dtype,
+                            device=current_device,
+                            use_unpack_kernel = use_unpack_kernel,
+                            layer_activations = layer_activations,
+                            custom_model_class = current_custom_model_class
+                        )
+                    except ValueError as e:
+                        # Check if this is our special skip signal
+                        if "QUANT_SKIP_LAYERS:" in str(e):
+                            if verbose:
+                                print(f"[SKIP QUANT] Layer {linear_layer.name}: {str(e).split('QUANT_SKIP_LAYERS: ')[1]}")
+                            out_module = linear_layer.to(device=current_device, dtype=compute_dtype)
+                        else:
+                            # Re-raise other ValueError exceptions
+                            raise
 
             out_module.device = current_device
             return out_module
@@ -1319,3 +1361,4 @@ class BaseSINQHFModel(BaseSINQModel):
 class AutoSINQHFModel(BaseSINQHFModel, BasePatch):
 
     pass
+
