@@ -11,10 +11,10 @@ from .utils import is_divisible
 
 try:
     import gemlite
-    has_gemlite = True
-    gemlite.set_autotune("fast")
-    gemlite.set_kernel_caching(True)
-    print('found gemlite installation')
+    has_gemlite = False
+    #gemlite.set_autotune("fast")
+    #gemlite.set_kernel_caching(True)
+    #print('found gemlite installation')
 
 except:
     has_gemlite = False
